@@ -8,10 +8,10 @@ Rule
  { return { ...lhsDir, rhs, ...rate, ...command, ...reward, ...sound, ...caption } }
 
 LhsDir
- = t:Subject _ d:Dir _ s:LhsTermSeq { return { dir: d, lhs: [t].concat(s) } }
- / t:Subject _ d:Dir { return { dir: d, lhs: [t] } }
- / t:Subject _sep s:LhsTermSeq { return { lhs: [t].concat(s) } }
- / t:Subject { return { lhs: [t] } }
+ = t:Subject _ d:Dir _ s:LhsTermSeq { return { prefix: t.prefix, dir: d, lhs: [t.term].concat(s) } }
+ / t:Subject _ d:Dir { return { prefix: t.prefix, dir: d, lhs: [t.term] } }
+ / t:Subject _sep s:LhsTermSeq { return { prefix: t.prefix, lhs: [t.term].concat(s) } }
+ / t:Subject { return { prefix: t.prefix, lhs: [t.term] } }
 
 Dir
  = ">" d:[nsewNSEW] ">" { return d.toLowerCase() }
@@ -21,19 +21,21 @@ LhsTermSeq
  / t:WildLhsTerm { return [t] }
 
 Subject
- = t:LhsTerm { return t }
+ = p:Prefix "/" s:LhsTermCharSeq { return { prefix: p.toLowerCase(), term: text().toLowerCase() } }
+ / Prefix { return { prefix: text().toLowerCase(), term: text().toLowerCase() } }
+ / EmptyLhsTerm { return { prefix: "_", term: "_" } }
 
 WildLhsTerm
  = "*"
  / LhsTerm
 
 LhsTerm
- = Prefix LhsTermCharSeq { return text() }
- / Prefix { return text() }
+ = Prefix LhsTermCharSeq { return text().toLowerCase() }
+ / Prefix { return text().toLowerCase() }
  / EmptyLhsTerm
  
  EmptyLhsTerm
- = "_" { return "" }
+ = "_"
 
 Prefix
  = InitChar PrefixCharSeq
