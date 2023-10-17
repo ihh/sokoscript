@@ -4,15 +4,15 @@ RuleSet
  / r:Rule _ { return [r] }
 
 Rule
-= lhsDir:LhsDir _ ":" _ rhs:Rhs _ rate:Rate _ command:Command _ reward:Reward _ sound:Sound _ caption:Caption
- { return { ...lhsDir, rhs, ...rate, ...command, ...reward, ...sound, ...caption } }
+= lhs:Lhs _ ":" _ rhs:Rhs _ rate:Rate _ command:Command _ reward:Reward _ sound:Sound _ caption:Caption
+ { return { lhs, rhs, ...rate, ...command, ...reward, ...sound, ...caption } }
 
-LhsDir
- = t:Subject _ dir:AbsDir _ u:LhsTerm s:LhsNbrSeq { return { prefix: t.prefix, lhs: [{ term: t.term }, { dir, term: u.term }].concat(s) } }
- / t:Subject _ dir:AbsDir _ u:LhsTerm { return { prefix: t.prefix, lhs: [{ term: t.term }, { dir, term: u.term }] } }
- / t:Subject _sep u:LhsTerm s:LhsNbrSeq { return { prefix: t.prefix, lhs: [{ term: t.term }, { term: u.term }].concat(s) } }
- / t:Subject _sep u:LhsTerm { return { prefix: t.prefix, lhs: [{ term: t.term }, { term: u.term }] } }
- / t:Subject { return { prefix: t.prefix, lhs: [{ term: t.term }] } }
+Lhs
+ = t:Subject _ dir:AbsDir _ u:LhsTerm s:LhsNbrSeq { return [t, { dir, ...u }].concat(s) }
+ / t:Subject _ dir:AbsDir _ u:LhsTerm { return [t, { dir, ...u }] }
+ / t:Subject _sep u:LhsTerm s:LhsNbrSeq { return [t, u].concat(s) }
+ / t:Subject _sep u:LhsTerm { return [t, u] }
+ / t:Subject { return [t] }
 
 AbsDir
  = ">" d:[nsewNSEW] ">" { return d.toUpperCase() }
@@ -21,14 +21,14 @@ RelDir
  = ">" d:[fblrFBLR] ">" { return d.toUpperCase() }
 
 LhsNbrSeq
- = _ dir:RelDir _ t:WildLhsTerm s:LhsNbrSeq { return [{ dir, term: t.term }].concat(s) }
- / _ dir:RelDir _ t:WildLhsTerm { return [{ dir, term: t.term }] }
- / _sep t:WildLhsTerm s:LhsNbrSeq { return [{ term: t.term }].concat(s) }
- / _sep t:WildLhsTerm { return [{ term: t.term }] }
+ = _ dir:RelDir _ t:WildLhsTerm s:LhsNbrSeq { return [{ dir, ...t }].concat(s) }
+ / _ dir:RelDir _ t:WildLhsTerm { return [{ dir, ...t }] }
+ / _sep t:WildLhsTerm s:LhsNbrSeq { return [t].concat(s) }
+ / _sep t:WildLhsTerm { return [t] }
 
 Subject
- = prefix:Prefix "/" term:LhsTermCharSeq { return { prefix, term: text() } }
- / Prefix { return { prefix: text(), term: text() } }
+ = prefix:Prefix "/" state:LhsTermCharSeq { return { prefix, state, term: text() } }
+ / prefix:Prefix { return { prefix, term: text() } }
  / EmptyLhsTerm { return { prefix: "_", term: "_" } }
 
 WildLhsTerm
@@ -36,15 +36,15 @@ WildLhsTerm
  / LhsTerm
 
 LhsTerm
- = Prefix "/" LhsTermCharSeq { return { term: text() } }
- / Prefix { return { term: text() } }
- / EmptyLhsTerm { return { term: text() } }
+ = prefix:Prefix "/" state:LhsTermCharSeq { return { prefix, state, term: text() } }
+ / prefix:Prefix { return { prefix, term: text() } }
+ / EmptyLhsTerm { return { prefix: "_", term: text() } }
  
  EmptyLhsTerm
  = "_"
 
 Prefix
- = InitChar PrefixCharSeq
+ = InitChar PrefixCharSeq { return text() }
  / InitChar
 
 PrefixCharSeq
@@ -78,8 +78,14 @@ RhsTermSeq
  / s:RhsTerm { return [s] }
 
 RhsTerm
- = "$" PositiveInteger { return { term: text() } }
- / LhsTerm
+ = "$" g:PositiveInteger { return { term: text(), group: parseInt(g) } }
+ / prefix:Prefix "/" state:RhsTermCharSeq { return { prefix, state, term: text() } }
+ / prefix:Prefix { return { prefix, term: text() } }
+ / EmptyLhsTerm { return { prefix: "_", term: text() } }
+
+RhsTermCharSeq
+ = RhsTermChar RhsTermCharSeq
+ / RhsTermChar
 
 
 
@@ -120,3 +126,6 @@ _sep
 
 _ "whitespace"
   = [ \t\n\r]*
+
+RhsTermChar
+ = DirChar / PrefixChar
