@@ -4,9 +4,20 @@ RuleSet
  / r:Rule _ { return [r] }
 
 Rule
- = lhs:Lhs _ ":" _ rhs:Rhs _ rate:Rate _ command:Command _ key:Key _ reward:Reward _ sound:Sound _ caption:Caption
+ = lhs:Lhs _ ":" _ rhs:Rhs
  !{ return rhs.filter ((t) => t.group > lhs.length).length }
-{ return { lhs, rhs, ...rate, ...command, ...key, ...reward, ...sound, ...caption } }
+  attrs:(_ Attribute)*
+ !{
+    let count = {};
+    attrs.forEach ((attr) => Object.keys(attr[1]).forEach((k) => count[k] = (count[k] || 0) + 1));
+    const duplicates = Object.keys(count).filter((k) => count[k] > 1);
+    if (duplicates.length)
+      console.warn ("Warning - duplicate attributes: " + duplicates.map((d)=>'"'+d+'"').join(", "));
+    return duplicates.length;
+  }
+  { return { lhs, rhs, ...attrs.reduce((a, attr) => { return { ...a, ...attr[1] } }, {}) } }
+
+Attribute = Rate / Command / Key / Reward / Sound / Caption
 
 Lhs
  = t:Subject _ addr:AbsDirOrNbrAddr _ u:LhsTerm s:LhsNbrSeq { return [t, { addr, ...u }].concat(s) }
@@ -16,21 +27,21 @@ Lhs
  / t:Subject { return [t] }
 
 AbsDirOrNbrAddr
-  = ">" d:AbsDirChar ">" { return { op: "dir", dir: d.toUpperCase() } }
+  = ">" d:AbsDirChar ">" { return { op: "neighbor", dir: d.toUpperCase() } }
   / NbrAddr
 
 AbsDirChar
  = [nsewNSEW]
 
 RelDirOrNbrAddr
-  = ">" d:[fblrFBLR] ">" { return { op: "dir", dir: d.toUpperCase() } }
+  = ">" d:[fblrFBLR] ">" { return { op: "neighbor", dir: d.toUpperCase() } }
  / NbrAddr
 
 RelDirChar
  = [fblrFBLR]
 
 NbrAddr
- = ">" v:AdditiveVecExpr ">" { return v }
+ = ">" cell:AdditiveVecExpr ">" { return { op: "cell", cell } }
 
 
 TerminatedVecExpr
@@ -116,9 +127,11 @@ WildChar
   = "?" { return { op: "wild" } }
 
 CharClass
-  = "[^" chars:(PrefixChar / TerminatedVecExpr)+ "]" { return { op: "negated", chars } }
-  / "[" chars:(PrefixChar / TerminatedVecExpr)+ "]" { return { op: "class", chars } }
+  = "[^" chars:(StateChar / Neighborhood / TerminatedVecExpr)+ "]" { return { op: "negated", chars } }
+  / "[" chars:(StateChar / Neighborhood / TerminatedVecExpr)+ "]" { return { op: "class", chars } }
 
+Neighborhood
+ = "@" neighborhood:("moore" / "neumann") "(" _ origin:AdditiveVecExpr _ ")" { return { op: "neighborhood", neighborhood, origin }}
 
 Rhs = RhsTermSeq
 
@@ -138,35 +151,30 @@ RhsStateCharSeq
 
 RhsStateChar
  = TerminatedVecExpr
- / char:[0-9A-Za-z_] { return { op: "char", char } }
+ / char:StateChar { return { op: "char", char } }
  / "\\" char:. { return { op: "char", char } }
 
+StateChar = [0-9A-Za-z_]
 
 
 Rate
  = "(" _ r:Float _ ")" { return { rate: parseFloat(r) } }
- / "" { return {} }
 
 Command
- = "{" command:[^\}]* "}" { return { command } }
- / "" { return {} }
+ = "{" command:[^\}]+ "}" { return { command } }
 
 Key
  = "'\\" key:. "'" { return { key } }
  / "'" key:. "'" { return { key } }
- / "" { return {} }
 
 Reward
  = "<" _ r:SignedInteger _ ">" { return { reward: parseInt(r) } }
- / "" { return {} }
 
 Sound
  = "#" sound:[^#]* "#" { return { sound } }
- / "" { return {} }
 
 Caption
  = "\"" caption:[^\"]* "\"" { return caption }
- / "" { return {} }
 
 
 NonZeroInteger

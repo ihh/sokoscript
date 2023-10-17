@@ -1,7 +1,12 @@
-a/x?[@(0,0);@(1,1);] b/@r-%h@f+@l; : c/@f; d/X\1.
+a/x?[@(0,0);@(1,1);] b/@r-%h@f+@l; : c/@f; d/X\..
 
 x y:z.
 a:b (2) {x} <4> .
+a:d (2) <3> {x} .
+
+a >@n> b:c.
+
+z/[@moore(@f)] : z/@f;.
 
 player crate >l> * : $3 player crate {z} .
 player >e> crate _ : _ $1 $2 {x} 'x' .

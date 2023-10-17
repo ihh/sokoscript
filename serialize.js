@@ -13,6 +13,8 @@ const lhsStateChar = (t) => {
     return '[' + t.chars.map(lhsStateChar).join('') + ']';
   case 'negated':
     return '[^' + t.chars.map(lhsStateChar).join('') + ']';
+  case 'neighborhood':
+    return '@' + t.neighborhood + '(' + vecExpr(t.origin) + ')';
   case '+':
   case '-':
   case '*':
@@ -22,8 +24,8 @@ const lhsStateChar = (t) => {
   case 'state':
     return vecExpr(t) + ';';
   default:
-    throw new Error ("Unrecognized op " + t.op + " in " + JSON.stringify(t));
-    return '';
+    throw new Error ("Unrecognized op '" + t.op + "' in " + JSON.stringify(t));
+    return undefined;
   }
 }
 const vecExpr = (t) => {
@@ -44,8 +46,8 @@ const vecExpr = (t) => {
   case 'matrix':
     return '%' + t.matrix;
   default:
-    throw new Error ("Unrecognized op " + t.op + " in " + JSON.stringify(t));
-    return '';
+    throw new Error ("Unrecognized op '" + t.op + "' in " + JSON.stringify(t));
+    return undefined;
   }
 }
 const multiplicativeVecExpr = (t) => {
@@ -64,7 +66,15 @@ const lhsTerm = (t) => {
 }
 
 const addrExpr = (t) => {
-  return '>' + (t.op === 'dir' ? t.dir.toUpperCase() : vecExpr(t)) + '>';
+  switch (t.op) {
+    case 'neighbor':
+      return '>' + t.dir.toUpperCase() + '>';
+    case 'cell':
+      return '>' + vecExpr(t.cell) + '>';
+    default:
+      throw new Error ("Unrecognized op '" + t.op + "' in " + JSON.stringify(t));
+      return undefined;
+    }
 }
 
 const makeLhs = (lhs) => {
