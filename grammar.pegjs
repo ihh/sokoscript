@@ -9,28 +9,28 @@ Rule
 { return { lhs, rhs, ...rate, ...command, ...key, ...reward, ...sound, ...caption } }
 
 Lhs
- = t:Subject _ dir:AbsDirOrNbrAddr _ u:LhsTerm s:LhsNbrSeq { return [t, { dir, ...u }].concat(s) }
- / t:Subject _ dir:AbsDirOrNbrAddr _ u:LhsTerm { return [t, { dir, ...u }] }
+ = t:Subject _ addr:AbsDirOrNbrAddr _ u:LhsTerm s:LhsNbrSeq { return [t, { addr, ...u }].concat(s) }
+ / t:Subject _ addr:AbsDirOrNbrAddr _ u:LhsTerm { return [t, { addr, ...u }] }
  / t:Subject _sep u:LhsTerm s:LhsNbrSeq { return [t, u].concat(s) }
  / t:Subject _sep u:LhsTerm { return [t, u] }
  / t:Subject { return [t] }
 
 AbsDirOrNbrAddr
- = ">" d:AbsDirChar ">" { return d.toUpperCase() }
+  = ">" d:AbsDirChar ">" { return { op: "dir", dir: d.toUpperCase() } }
   / NbrAddr
 
 AbsDirChar
  = [nsewNSEW]
 
 RelDirOrNbrAddr
- = ">" d:[fblrFBLR] ">" { return d.toUpperCase() }
+  = ">" d:[fblrFBLR] ">" { return { op: "dir", dir: d.toUpperCase() } }
  / NbrAddr
 
 RelDirChar
  = [fblrFBLR]
 
 NbrAddr
- = ">" AdditiveVecExpr ">"
+ = ">" v:AdditiveVecExpr ">" { return v }
 
 
 TerminatedVecExpr
@@ -53,7 +53,7 @@ MultiplicativeVecExpr
   / PrimaryVecExpr
 
 MatrixExpr
-  = "%" m:[blrhvBLRHV] { return { op: "matrix", matrix: m.toUpperCase() } }
+  = "%" m:[dblrhvDBLRHV] { return { op: "matrix", matrix: m.toUpperCase() } }
 
 
 PrimaryVecExpr
@@ -65,8 +65,8 @@ PrimaryVecExpr
 
 
 LhsNbrSeq
- = _ dir:RelDirOrNbrAddr _ t:WildLhsTerm s:LhsNbrSeq { return [{ dir, ...t }].concat(s) }
- / _ dir:RelDirOrNbrAddr _ t:WildLhsTerm { return [{ dir, ...t }] }
+ = _ addr:RelDirOrNbrAddr _ t:WildLhsTerm s:LhsNbrSeq { return [{ addr, ...t }].concat(s) }
+ / _ addr:RelDirOrNbrAddr _ t:WildLhsTerm { return [{ addr, ...t }] }
  / _sep t:WildLhsTerm s:LhsNbrSeq { return [t].concat(s) }
  / _sep t:WildLhsTerm { return [t] }
 
@@ -76,7 +76,7 @@ Subject
  / EmptyLhsTerm { return { type: "_" } }
 
 WildLhsTerm
- = "*" { return { wild: "*" } }
+ = "*" { return { op: "any" } }
  / LhsTerm
 
 LhsTerm
@@ -113,11 +113,11 @@ LhsStateChar
  = WildChar / CharClass / RhsStateChar
 
 WildChar
-  = "?" { return { type: "wild" } }
+  = "?" { return { op: "wild" } }
 
 CharClass
-  = "[^" chars:(PrefixChar / TerminatedVecExpr)+ "]" { return { type: "negated", chars } }
-  / "[" chars:(PrefixChar / TerminatedVecExpr)+ "]" { return { type: "class", chars } }
+  = "[^" chars:(PrefixChar / TerminatedVecExpr)+ "]" { return { op: "negated", chars } }
+  / "[" chars:(PrefixChar / TerminatedVecExpr)+ "]" { return { op: "class", chars } }
 
 
 Rhs = RhsTermSeq
@@ -127,7 +127,7 @@ RhsTermSeq
  / s:RhsTerm { return [s] }
 
 RhsTerm
- = "$" g:PositiveInteger { return { group: parseInt(g) } }
+  = "$" g:PositiveInteger { return { op: "group", group: parseInt(g) } }
  / type:Prefix "/" state:RhsStateCharSeq { return { type, state } }
  / type:Prefix { return { type } }
  / EmptyLhsTerm { return { type: "_" } }
@@ -138,8 +138,8 @@ RhsStateCharSeq
 
 RhsStateChar
  = TerminatedVecExpr
- / char:[0-9A-Za-z_] { return { type: "char", char } }
- / "\\" char:. { return { type: "char", char } }
+ / char:[0-9A-Za-z_] { return { op: "char", char } }
+ / "\\" char:. { return { op: "char", char } }
 
 
 
