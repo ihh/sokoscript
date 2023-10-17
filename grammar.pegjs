@@ -4,7 +4,8 @@ RuleSet
  / r:Rule _ { return [r] }
 
 Rule
-= lhs:Lhs _ ":" _ rhs:Rhs _ rate:Rate _ command:Command _ reward:Reward _ sound:Sound _ caption:Caption
+ = lhs:Lhs _ ":" _ rhs:Rhs _ rate:Rate _ command:Command _ reward:Reward _ sound:Sound _ caption:Caption
+ !{ return rhs.filter ((t) => t.group > lhs.length).length }
  { return { lhs, rhs, ...rate, ...command, ...reward, ...sound, ...caption } }
 
 Lhs
@@ -27,18 +28,18 @@ LhsNbrSeq
  / _sep t:WildLhsTerm { return [t] }
 
 Subject
- = prefix:Prefix "/" state:LhsTermCharSeq { return { prefix, state, term: text() } }
- / prefix:Prefix { return { prefix, term: text() } }
- / EmptyLhsTerm { return { prefix: "_", term: "_" } }
+ = type:Prefix "/" state:LhsTermCharSeq { return { type, state } }
+ / type:Prefix { return { type } }
+ / EmptyLhsTerm { return { type: "_" } }
 
 WildLhsTerm
- = "*" { return { term: text() } }
+ = "*" { return { wild: "*" } }
  / LhsTerm
 
 LhsTerm
- = prefix:Prefix "/" state:LhsTermCharSeq { return { prefix, state, term: text() } }
- / prefix:Prefix { return { prefix, term: text() } }
- / EmptyLhsTerm { return { prefix: "_", term: text() } }
+ = type:Prefix "/" state:LhsTermCharSeq { return { type, state } }
+ / type:Prefix { return { type } }
+ / EmptyLhsTerm { return { type: "_" } }
  
  EmptyLhsTerm
  = "_"
@@ -78,10 +79,10 @@ RhsTermSeq
  / s:RhsTerm { return [s] }
 
 RhsTerm
- = "$" g:PositiveInteger { return { term: text(), group: parseInt(g) } }
- / prefix:Prefix "/" state:RhsTermCharSeq { return { prefix, state, term: text() } }
- / prefix:Prefix { return { prefix, term: text() } }
- / EmptyLhsTerm { return { prefix: "_", term: text() } }
+ = "$" g:PositiveInteger { return { group: parseInt(g) } }
+ / type:Prefix "/" state:RhsTermCharSeq { return { type, state } }
+ / type:Prefix { return { type } }
+ / EmptyLhsTerm { return { type: "_" } }
 
 RhsTermCharSeq
  = RhsTermChar RhsTermCharSeq
@@ -129,3 +130,4 @@ _ "whitespace"
 
 RhsTermChar
  = DirChar / PrefixChar
+
