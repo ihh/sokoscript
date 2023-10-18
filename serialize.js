@@ -4,6 +4,8 @@ const escape = (c, special) => {
   return (special.indexOf(c) >= 0 ? '\\' : '') + c;
 }
 const lhsStateChar = (t) => {
+  if (typeof(t) === 'string')
+    return t;
   switch (t.op) {
   case 'char':
     return escape(t['char']);
@@ -19,11 +21,11 @@ const lhsStateChar = (t) => {
     return '@' + t.neighborhood + '(' + vecExpr(t.origin) + ')';
   case 'clock':
   case 'anti':
-      return '@' + t.op + '(' + vecExpr(t.v) + ')';
+      return '@' + t.op + '(' + vecExpr(t.arg) + ')';
   case 'add':
   case 'sub':
-            return '@' + t.op + '(' + vecExpr(t.x) + ',' + vecExpr(t.y) + ')';
-        case '+':
+      return '@' + t.op + '(' + vecExpr(t.left) + ',' + vecExpr(t.right) + ')';
+  case '+':
   case '-':
   case '*':
   case 'location':
@@ -75,7 +77,7 @@ const lhsTerm = (t) => {
     case 'any':
       return '*';
     case 'negterm':
-      return '^' + lhsTerm(t.negate);
+      return '^' + lhsTerm(t.term);
     case 'alt':
       return '(' + t.alt.map(lhsTerm).join('|') + ')';
     default:
@@ -88,7 +90,7 @@ const addrExpr = (t) => {
     case 'neighbor':
       return '>' + t.dir.toUpperCase() + '>';
     case 'cell':
-      return '>' + vecExpr(t.cell) + '>';
+      return '>' + vecExpr(t.arg) + '>';
     default:
       throw new Error ("Unrecognized op '" + t.op + "' in " + JSON.stringify(t));
       return undefined;

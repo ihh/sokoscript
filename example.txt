@@ -1,13 +1,13 @@
+xyz/@int(3); : x/@1;.
+
 not ^not: not.
 
 wild/*: wild.
 wild/xy*: wild.
 
-l (a|b|c) : $1.
+l (a|b|c/@1;) : $1.
 
 l ^(x|y): $1.
-
-xyz/@int(3); : x.
 
 a/x?[@(0,0);@(1,1);] b/@r-%h@f+@l; : c/@f; d/X\..
 

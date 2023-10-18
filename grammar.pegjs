@@ -1,11 +1,35 @@
+{
+  const validatePositionals = (expr, matchedStateChars) =>
+    (expr.hasOwnProperty('group')
+     ? ((expr.group <= matchedStateChars.length)
+        && (expr.hasOwnProperty('char') ? (expr.char <= matchedStateChars[expr.group-1]) : true))
+     : true)
+    && ['left','right','arg']
+        .filter((prop)=>expr.hasOwnProperty(prop))
+        .reduce ((result, prop) => result && validatePositionals (expr[prop], matchedStateChars), true);
+
+  const reducePred = (args, pred) => args.reduce ((result, arg) => result && pred(arg), true);
+  const altList = (alt) => alt.op === 'alt' ? alt.alt : [alt];
+  const reduceAlt = (alt, pred) => alt.op === 'negterm' ? reduceAlt (alt.term, pred) : reducePred (altList(alt), pred);
+  const validateState = (term, msc) => !term.hasOwnProperty('state') || reducePred (term.state, (char) => validatePositionals(char,msc));
+  const validateDir = (term, msc) => !term.hasOwnProperty('dir') || validatePositionals(term.dir,msc);
+  const matchedStateChars = (alt) => altList(alt).length && Math.min.apply (null, altList(alt).map (term => term.hasOwnProperty('state') ? term.state.filter((s)=>!(s.op==='any')).length : 0));
+  const validateLhs = (lhs) => lhs.reduce ((memo, term) => ({ result: memo.result && reduceAlt (term, (term) => validateState(term,memo.matchedStateChars) && validateDir(term,memo.matchedStateChars)),
+                                                              matchedStateChars: memo.matchedStateChars.concat ([matchedStateChars(term)]) }),
+                                                            { result: true, matchedStateChars: [] }).result;
+  const validateRhs = (lhs, rhs) => rhs.reduce ((result, term) => result && reduceAlt (term, (term) => validateState(term,lhs.map(matchedStateChars))), true);
+}
+
 RuleSet
  = r:Rule _ "." _ s:RuleSet { return [r].concat(s) }
  / r:Rule _ "." _ { return [r] }
  / r:Rule _ { return [r] }
 
 Rule
- = lhs:Lhs _ ":" _ rhs:Rhs
- !{ return rhs.filter ((t) => t.group > lhs.length).length }
+ = lhs:Lhs
+ &{ return validateLhs(lhs) }
+   _ ":" _ rhs:Rhs
+ &{ return validateRhs(lhs,rhs) }
   attrs:(_ Attribute)*
  !{
     let count = {};
@@ -41,7 +65,7 @@ RelDirChar
  = [fblrFBLR]
 
 NbrAddr
- = ">" cell:AdditiveVecExpr ">" { return { op: "cell", cell } }
+ = ">" arg:AdditiveVecExpr ">" { return { op: "cell", arg } }
 
 
 TerminatedVecExpr
@@ -72,10 +96,10 @@ PrimaryVecExpr
   / "@" dir:(AbsDirChar / RelDirChar) { return { op: "dir", dir: dir.toUpperCase() } }
   / "@(" _ x:SignedInteger _ "," _ y:SignedInteger _ ")" { return { op: "vector", x: parseInt(x), y: parseInt(y) } }
   / "@int(" _ n:SignedInteger _ ")" { return { op: "integer", n: parseInt(n) } }
-  / "@add(" _ x:AdditiveVecExpr _ "," _ y:AdditiveVecExpr _ ")" { return { op: "add", x, y } /* addition mod 94 */ }
-  / "@sub(" _ x:AdditiveVecExpr _ "," _ y:AdditiveVecExpr _ ")" { return { op: "sub", x, y } /* subtraction mod 94 */ }
-  / "@clock(" _ v:AdditiveVecExpr _ ")" { return { op: "clock", v } }
-  / "@anti(" _ v:AdditiveVecExpr _ ")" { return { op: "anti", v } }
+  / "@add(" _ left:AdditiveVecExpr _ "," _ right:AdditiveVecExpr _ ")" { return { op: "add", left, right } /* addition mod 94 */ }
+  / "@sub(" _ left:AdditiveVecExpr _ "," _ right:AdditiveVecExpr _ ")" { return { op: "sub", left, right } /* subtraction mod 94 */ }
+  / "@clock(" _ arg:AdditiveVecExpr _ ")" { return { op: "clock", arg } }
+  / "@anti(" _ arg:AdditiveVecExpr _ ")" { return { op: "anti", arg } }
   / "$" group:NonZeroInteger "/" char:NonZeroInteger { return { op: "state", group, char } }
   / "(" expr:AdditiveVecExpr ")" { return expr }
 
@@ -95,7 +119,7 @@ WildLhsTerm
  / LhsTerm
 
 LhsTerm
- = "^" negate:AltLhsTerm { return { op: "negterm", negate } }
+ = "^" term:AltLhsTerm { return { op: "negterm", term } }
  / AltLhsTerm
 
 AltLhsTerm
@@ -150,7 +174,7 @@ RhsTermSeq
  / s:RhsTerm { return [s] }
 
 RhsTerm
-  = "$" g:PositiveInteger { return { op: "group", group: parseInt(g) } }
+  = "$" group:NonZeroInteger { return { op: "group", group } }
  / type:Prefix "/" state:RhsStateCharSeq { return { type, state } }
  / type:Prefix { return { type } }
  / EmptyLhsTerm { return { type: "_" } }
