@@ -70,7 +70,12 @@ MatrixExpr
 PrimaryVecExpr
   = "@" group:NonZeroInteger { return { op: "location", group } }
   / "@" dir:(AbsDirChar / RelDirChar) { return { op: "dir", dir: dir.toUpperCase() } }
-  / "@(" _ x:SignedInteger _ "," _ y:SignedInteger _ ")" { return { op: "constant", x: parseInt(x), y: parseInt(y) } }
+  / "@(" _ x:SignedInteger _ "," _ y:SignedInteger _ ")" { return { op: "vector", x: parseInt(x), y: parseInt(y) } }
+  / "@int(" _ n:SignedInteger _ ")" { return { op: "integer", n: parseInt(n) } }
+  / "@add(" _ x:AdditiveVecExpr _ "," _ y:AdditiveVecExpr _ ")" { return { op: "add", x, y } /* addition mod 94 */ }
+  / "@sub(" _ x:AdditiveVecExpr _ "," _ y:AdditiveVecExpr _ ")" { return { op: "sub", x, y } /* subtraction mod 94 */ }
+  / "@clock(" _ v:AdditiveVecExpr _ ")" { return { op: "clock", v } }
+  / "@anti(" _ v:AdditiveVecExpr _ ")" { return { op: "anti", v } }
   / "$" group:NonZeroInteger "/" char:NonZeroInteger { return { op: "state", group, char } }
   / "(" expr:AdditiveVecExpr ")" { return expr }
 
@@ -84,14 +89,18 @@ LhsNbrSeq
 Subject
  = type:Prefix "/" state:LhsStateCharSeq { return { type, state } }
  / type:Prefix { return { type } }
- / EmptyLhsTerm { return { type: "_" } }
 
 WildLhsTerm
  = "*" { return { op: "any" } }
  / LhsTerm
 
 LhsTerm
- = "^" negate:PrimaryLhsTerm { return { negate } }
+ = "^" negate:AltLhsTerm { return { op: "negterm", negate } }
+ / AltLhsTerm
+
+AltLhsTerm
+ = "(" first:PrimaryLhsTerm rest:("|" PrimaryLhsTerm)+ ")"
+ { return { op: "alt", alt: rest.reduce ((l, t) => l.concat([t[1]]), [first]) } }
  / PrimaryLhsTerm
 
 PrimaryLhsTerm

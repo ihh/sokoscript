@@ -15,12 +15,19 @@ const lhsStateChar = (t) => {
     return '[^' + t.chars.map(lhsStateChar).join('') + ']';
   case 'neighborhood':
     return '@' + t.neighborhood + '(' + vecExpr(t.origin) + ')';
-  case '+':
+  case 'clock':
+  case 'anti':
+      return '@' + t.op + '(' + vecExpr(t.v) + ')';
+  case 'add':
+  case 'sub':
+            return '@' + t.op + '(' + vecExpr(t.x) + ',' + vecExpr(t.y) + ')';
+        case '+':
   case '-':
   case '*':
   case 'location':
   case 'dir':
-  case 'constant':
+  case 'integer':
+  case 'vector':
   case 'state':
     return vecExpr(t) + ';';
   default:
@@ -39,7 +46,9 @@ const vecExpr = (t) => {
     return '@' + t.group;
   case 'dir':
     return '@' + t.dir;
-  case 'constant':
+  case 'integer':
+    return '@int(' + t.n + ')';
+  case 'vector':
     return '@(' + t.x + ',' + t.y + ')';
   case 'state':
     return '$' + t.group + '/' + t['char'];
@@ -60,9 +69,16 @@ const termWithState = (t) => {
 }
 
 const lhsTerm = (t) => {
-  if (t.op === 'any')
-    return '*';
-  return termWithState(t);
+  switch (t.op) {
+    case 'any':
+      return '*';
+    case 'negterm':
+      return '^' + lhsTerm(t.negate);
+    case 'alt':
+      return '(' + t.alt.map(lhsTerm).join('|') + ')';
+    default:
+      return termWithState(t);
+    }
 }
 
 const addrExpr = (t) => {
