@@ -3390,9 +3390,9 @@ function peg$parse(input, options) {
   }
 
 
-    const validatePositionals = (expr, matchedStateChars) =>
+    const validatePositionals = (expr, matchedStateChars, extraLoc) =>
       (expr.hasOwnProperty('group')
-       ? ((expr.group <= matchedStateChars.length)
+       ? ((expr.group <= matchedStateChars.length + (extraLoc && expr.op==='location' ? 1 : 0))
           && (expr.hasOwnProperty('char') ? (expr.char <= matchedStateChars[expr.group-1]) : true))
        : true)
       && ['left','right','arg']
@@ -3402,13 +3402,13 @@ function peg$parse(input, options) {
     const reducePred = (args, pred) => args.reduce ((result, arg) => result && pred(arg), true);
     const altList = (alt) => alt.op === 'alt' ? alt.alt : [alt];
     const reduceAlt = (alt, pred) => alt.op === 'negterm' ? reduceAlt (alt.term, pred) : reducePred (altList(alt), pred);
-    const validateState = (term, msc) => !term.hasOwnProperty('state') || reducePred (term.state, (char) => validatePositionals(char,msc));
-    const validateDir = (term, msc) => !term.hasOwnProperty('dir') || validatePositionals(term.dir,msc);
+    const validateState = (term, msc, extraLoc) => !term.hasOwnProperty('state') || reducePred (term.state, (char) => validatePositionals(char,msc,extraLoc));
+    const validateDir = (term, msc) => !term.hasOwnProperty('dir') || validatePositionals(term.dir,msc,false);
     const matchedStateChars = (alt) => altList(alt).length && Math.min.apply (null, altList(alt).map (term => term.hasOwnProperty('state') ? term.state.filter((s)=>!(s.op==='any')).length : 0));
-    const validateLhs = (lhs) => lhs.reduce ((memo, term) => ({ result: memo.result && reduceAlt (term, (term) => validateState(term,memo.matchedStateChars) && validateDir(term,memo.matchedStateChars)),
+    const validateLhs = (lhs) => lhs.reduce ((memo, term) => ({ result: memo.result && reduceAlt (term, (term) => validateState(term,memo.matchedStateChars,true) && validateDir(term,memo.matchedStateChars)),
                                                                 matchedStateChars: memo.matchedStateChars.concat ([matchedStateChars(term)]) }),
                                                               { result: true, matchedStateChars: [] }).result;
-    const validateRhs = (lhs, rhs) => rhs.reduce ((result, term) => result && reduceAlt (term, (term) => validateState(term,lhs.map(matchedStateChars))), true);
+    const validateRhs = (lhs, rhs) => rhs.reduce ((result, term) => result && reduceAlt (term, (term) => validateState(term,lhs.map(matchedStateChars),false)), true);
 
 
   peg$result = peg$startRuleFunction();
