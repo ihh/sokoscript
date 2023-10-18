@@ -122,6 +122,7 @@ PrefixCharSeq
 LhsStateCharSeq
  = c:LhsStateChar s:LhsStateCharSeq { return [c].concat(s) }
  / c:LhsStateChar { return [c] }
+ / "*" { return [{ op: "any" }] }
 
 InitChar
  = [a-z]

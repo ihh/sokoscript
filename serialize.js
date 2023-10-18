@@ -9,6 +9,8 @@ const lhsStateChar = (t) => {
     return escape(t['char']);
   case 'wild':
     return '?';
+  case 'any':
+    return '*';
   case 'class':
     return '[' + t.chars.map(lhsStateChar).join('') + ']';
   case 'negated':
