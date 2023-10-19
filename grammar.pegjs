@@ -63,22 +63,19 @@ InheritRhs
 Attribute = Rate / Command / Key / Reward / Sound / Caption
 
 Lhs
- = t:Subject _ addr:AbsDirOrNbrAddr _ u:LhsTerm s:LhsNbrSeq { return [t, { addr, ...u }].concat(s) }
- / t:Subject _ addr:AbsDirOrNbrAddr _ u:LhsTerm { return [t, { addr, ...u }] }
+ = t:Subject _ addr:DirOrNbrAddr _ u:LhsTerm s:LhsNbrSeq { return [t, { addr, ...u }].concat(s) }
+ / t:Subject _ addr:DirOrNbrAddr _ u:LhsTerm { return [t, { addr, ...u }] }
  / t:Subject _sep u:LhsTerm s:LhsNbrSeq { return [t, u].concat(s) }
  / t:Subject _sep u:LhsTerm { return [t, u] }
  / t:Subject { return [t] }
 
-AbsDirOrNbrAddr
-  = ">" d:AbsDirChar ">" { return { op: "neighbor", dir: d.toUpperCase() } }
+DirOrNbrAddr
+  = ">" d:AbsDirChar ">" { return { op: "absdir", dir: d.toUpperCase() } }
+  / ">" d:RelDirChar ">" { return { op: "reldir", dir: d.toUpperCase() } }
   / NbrAddr
 
 AbsDirChar
  = [nsewNSEW]
-
-RelDirOrNbrAddr
-  = ">" d:RelDirChar ">" { return { op: "neighbor", dir: d.toUpperCase() } }
- / NbrAddr
 
 RelDirChar
  = [fblrFBLR]
@@ -115,14 +112,15 @@ PrimaryVecExpr
   / "@sub(" _ left:AdditiveVecExpr _ "," _ right:AdditiveVecExpr _ ")" { return { op: "sub", left, right } /* subtraction mod 94 */ }
   / "@clock(" _ arg:AdditiveVecExpr _ ")" { return { op: "clock", arg } }
   / "@anti(" _ arg:AdditiveVecExpr _ ")" { return { op: "anti", arg } }
-  / "@" dir:(AbsDirChar / RelDirChar) { return { op: "dir", dir: dir.toUpperCase() } }
+  / "@" dir:AbsDirChar { return { op: "absdir", dir: dir.toUpperCase() } }
+  / "@" dir:RelDirChar { return { op: "reldir", dir: dir.toUpperCase() } }
   / "$" group:NonZeroInteger "#" char:NonZeroInteger { return { op: "state", group, char } }
   / "(" expr:AdditiveVecExpr ")" { return expr }
 
 
 LhsNbrSeq
- = _ addr:RelDirOrNbrAddr _ t:WildLhsTerm s:LhsNbrSeq { return [{ addr, ...t }].concat(s) }
- / _ addr:RelDirOrNbrAddr _ t:WildLhsTerm { return [{ addr, ...t }] }
+ = _ addr:DirOrNbrAddr _ t:WildLhsTerm s:LhsNbrSeq { return [{ addr, ...t }].concat(s) }
+ / _ addr:DirOrNbrAddr _ t:WildLhsTerm { return [{ addr, ...t }] }
  / _sep t:WildLhsTerm s:LhsNbrSeq { return [t].concat(s) }
  / _sep t:WildLhsTerm { return [t] }
 
@@ -190,10 +188,11 @@ RhsTermSeq
  / s:RhsTerm { return [s] }
 
 RhsTerm
-  = "$" group:NonZeroInteger { return { op: "group", group } }
- / type:Prefix "/" state:RhsStateCharSeq { return { type, state } }
- / type:Prefix { return { type } }
- / EmptyLhsTerm { return { type: "_" } }
+  = "$" group:NonZeroInteger "/" state:RhsStateCharSeq { return { op: "prefix", group, state } }
+  / "$" group:NonZeroInteger { return { op: "group", group } }
+  / type:Prefix "/" state:RhsStateCharSeq { return { type, state } }
+  / type:Prefix { return { type } }
+  / EmptyLhsTerm { return { type: "_" } }
 
 RhsStateCharSeq
  = c:RhsStateChar s:RhsStateCharSeq { return [c].concat(s) }

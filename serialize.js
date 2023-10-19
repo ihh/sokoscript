@@ -23,7 +23,7 @@ const makeStateChar = (t) => {
     return t;
   switch (t.op) {
   case 'char':
-    return escape(t['char']);
+    return escape(t.char);
   case 'wild':
     return '?';
   case 'any':
@@ -44,7 +44,8 @@ const makeStateChar = (t) => {
   case '-':
   case '*':
   case 'location':
-  case 'dir':
+  case 'absdir':
+  case 'reldir':
   case 'integer':
   case 'vector':
   case 'state':
@@ -63,14 +64,15 @@ const vecExpr = (t) => {
     return vecExpr(t.left) + t.op + multiplicativeVecExpr(t.right);
   case 'location':
     return '@' + t.group;
-  case 'dir':
-    return '@' + t.dir;
+  case 'absdir':
+  case 'reldir':
+      return '@' + t.dir;
   case 'integer':
     return '@int(' + t.n + ')';
   case 'vector':
     return '@vec(' + t.x + ',' + t.y + ')';
   case 'state':
-    return '$' + t.group + '#' + t['char'];
+    return '$' + t.group + '#' + t.char;
   case 'matrix':
     return '%' + t.matrix;
   default:
@@ -83,8 +85,12 @@ const multiplicativeVecExpr = (t) => {
   return (t.op === '+' || t.op === '-') ? ('(' + s + ')') : s;
 }
 
+const stateSuffix = (t) => {
+  return t.state ? ("/" + t.state.map(topStateChar).join('')) : '';
+}
+
 const termWithState = (t) => {
-  return t.type + (t.state ? ("/" + t.state.map(topStateChar).join('')) : '');
+  return t.type + stateSuffix(t);
 }
 
 const lhsTerm = (t) => {
@@ -102,8 +108,9 @@ const lhsTerm = (t) => {
 
 const addrExpr = (t) => {
   switch (t.op) {
-    case 'neighbor':
-      return '>' + t.dir.toUpperCase() + '>';
+    case 'absdir':
+    case 'reldir':
+        return '>' + t.dir.toUpperCase() + '>';
     case 'cell':
       return '>' + vecExpr(t.arg) + '>';
     default:
@@ -113,7 +120,6 @@ const addrExpr = (t) => {
 }
 
 const makeLhs = (lhs) => {
-  const defaultAddr = '>F>';
   return lhs.slice(1).reduce ((list, curr) => {
     return list + ' ' + (curr.addr ? (addrExpr(curr.addr) + ' ') : '') + lhsTerm(curr);
   }, [lhsTerm(lhs[0])]);
@@ -122,6 +128,8 @@ const makeLhs = (lhs) => {
 const rhsTerm = (t) => {
   if (t.op === 'group')
     return '$' + t.group;
+  if (t.op === 'prefix')
+    return '$' + t.group + '/' + stateSuffix(t);
   return termWithState(t);
 };
 

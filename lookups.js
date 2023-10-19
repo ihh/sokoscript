@@ -99,16 +99,15 @@ const charPermLookup = {
     vecSub: tabulateOperators (allChars, tabulateVecSub),
     intAdd: tabulateOperators (allChars, tabulateIntAdd),
     intSub: tabulateOperators (allChars, tabulateIntSub),
-    clock: { '+': tabulateCharFunc (rotateNeighborhoodClockwise),
-             '-': tabulateCharFunc (rotateNeighborhoodCounterClockwise) }
+    rotate: { clock: tabulateCharFunc (rotateNeighborhoodClockwise),
+              anti: tabulateCharFunc (rotateNeighborhoodCounterClockwise) }
 }
 
 // precompute quick lookups (e.g. "@ER" for "~R * @E = @R when dir is E" i.e. char for south)
 const absDirs = 'NESW'.split(''), relDirs = 'FBLR'.split('');
-const charLookup = Object.assign (
-    ...absDirs.map ((d) => ({ ['@'+d]: vec2char (dirVec[d]) })),
-    ...absDirs.map ((a) => Object.assign (...relDirs.map((r) => ({ ['@'+a+r]: vec2char (matMulVec (matrices[r], dirVec[a])) }))))
-);
+const charLookup = {
+    absDir: Object.assign (...absDirs.map ((d) => ({ [d]: vec2char (dirVec[d]) })))
+};
 
 // precompute char classes, e.g. neighborhoods of each cell
 const computeCharNeighborhood = (nbrs, c) => nbrs
@@ -120,4 +119,4 @@ const charClassLookup = tabulateOperators (Object.keys(neighborhood), (nh) => ta
 // precompute char->vector mapping
 const charVecLookup = tabulateCharFunc (char2vec);
 
-module.exports = { charPermLookup, charLookup, charClassLookup, charVecLookup };
+module.exports = { charPermLookup, charLookup, charClassLookup, charVecLookup, vec2char, int2char };
