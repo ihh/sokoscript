@@ -30,16 +30,35 @@ Rule
  &{ return validateLhs(lhs) }
    _ ":" _ rhs:Rhs
  &{ return validateRhs(lhs,rhs) }
-  attrs:(_ Attribute)*
+  _ "," _ attrs:Attributes
+  { return { type: 'transform', lhs, rhs, ...attrs } }
+ / lhs:Lhs
+ &{ return validateLhs(lhs) }
+   _ ":" _ rhs:Rhs
+ &{ return validateRhs(lhs,rhs) }
+  { return { type: 'transform', lhs, rhs } }
+ / child:Subject
+ &{ return validateLhs ([child]) }
+    _ "=" _ parents:InheritRhs
+ &{ return validateRhs ([child],parents) }
+  { return { type: 'inherit', child, parents } }
+
+Attributes
+ = first:Attribute rest:(_ Attribute)*
  !{
     let count = {};
-    attrs.forEach ((attr) => Object.keys(attr[1]).forEach((k) => count[k] = (count[k] || 0) + 1));
+    [[null,first]].concat(rest).forEach ((attr) => Object.keys(attr[1]).forEach((k) => count[k] = (count[k] || 0) + 1));
     const duplicates = Object.keys(count).filter((k) => count[k] > 1);
     if (duplicates.length)
       console.warn ("Warning - duplicate attributes: " + duplicates.map((d)=>'"'+d+'"').join(", "));
     return duplicates.length;
   }
-  { return { lhs, rhs, ...attrs.reduce((a, attr) => { return { ...a, ...attr[1] } }, {}) } }
+  { return [[null,first]].concat(rest).reduce((a, attr) => { return { ...a, ...attr[1] } }, {}) }
+
+
+InheritRhs
+ = first:RhsTerm rest:(_ "," _ RhsTerm)+ { return [first].concat (rest.map ((r) => r[3])) }
+ / t:RhsTerm { return [t] }
 
 Attribute = Rate / Command / Key / Reward / Sound / Caption
 
@@ -58,7 +77,7 @@ AbsDirChar
  = [nsewNSEW]
 
 RelDirOrNbrAddr
-  = ">" d:[fblrFBLR] ">" { return { op: "neighbor", dir: d.toUpperCase() } }
+  = ">" d:RelDirChar ">" { return { op: "neighbor", dir: d.toUpperCase() } }
  / NbrAddr
 
 RelDirChar
@@ -67,9 +86,6 @@ RelDirChar
 NbrAddr
  = ">" arg:AdditiveVecExpr ">" { return { op: "cell", arg } }
 
-
-TerminatedVecExpr
-  = v:AdditiveVecExpr _ ";" { return v }
 
 AdditiveVecExpr
  = first:MultiplicativeVecExpr rest:(_ ("+" / "-") _ MultiplicativeVecExpr)+ {
@@ -93,14 +109,14 @@ MatrixExpr
 
 PrimaryVecExpr
   = "@" group:NonZeroInteger { return { op: "location", group } }
-  / "@" dir:(AbsDirChar / RelDirChar) { return { op: "dir", dir: dir.toUpperCase() } }
-  / "@(" _ x:SignedInteger _ "," _ y:SignedInteger _ ")" { return { op: "vector", x: parseInt(x), y: parseInt(y) } }
+  / "@vec(" _ x:SignedInteger _ "," _ y:SignedInteger _ ")" { return { op: "vector", x: parseInt(x), y: parseInt(y) } }
   / "@int(" _ n:SignedInteger _ ")" { return { op: "integer", n: parseInt(n) } }
   / "@add(" _ left:AdditiveVecExpr _ "," _ right:AdditiveVecExpr _ ")" { return { op: "add", left, right } /* addition mod 94 */ }
   / "@sub(" _ left:AdditiveVecExpr _ "," _ right:AdditiveVecExpr _ ")" { return { op: "sub", left, right } /* subtraction mod 94 */ }
   / "@clock(" _ arg:AdditiveVecExpr _ ")" { return { op: "clock", arg } }
   / "@anti(" _ arg:AdditiveVecExpr _ ")" { return { op: "anti", arg } }
-  / "$" group:NonZeroInteger "/" char:NonZeroInteger { return { op: "state", group, char } }
+  / "@" dir:(AbsDirChar / RelDirChar) { return { op: "dir", dir: dir.toUpperCase() } }
+  / "$" group:NonZeroInteger "#" char:NonZeroInteger { return { op: "state", group, char } }
   / "(" expr:AdditiveVecExpr ")" { return expr }
 
 
@@ -161,8 +177,8 @@ WildChar
   = "?" { return { op: "wild" } }
 
 CharClass
-  = "[^" chars:(StateChar / Neighborhood / TerminatedVecExpr)+ "]" { return { op: "negated", chars } }
-  / "[" chars:(StateChar / Neighborhood / TerminatedVecExpr)+ "]" { return { op: "class", chars } }
+  = "[^" chars:(StateChar / Neighborhood / PrimaryVecExpr)+ "]" { return { op: "negated", chars } }
+  / "[" chars:(StateChar / Neighborhood / PrimaryVecExpr)+ "]" { return { op: "class", chars } }
 
 Neighborhood
  = "@" neighborhood:("moore" / "neumann") "(" _ origin:AdditiveVecExpr _ ")" { return { op: "neighborhood", neighborhood, origin }}
@@ -184,31 +200,37 @@ RhsStateCharSeq
  / c:RhsStateChar { return [c] }
 
 RhsStateChar
- = TerminatedVecExpr
+ = PrimaryVecExpr
  / char:StateChar { return { op: "char", char } }
  / "\\" char:. { return { op: "char", char } }
 
 StateChar = [0-9A-Za-z_]
 
 
+
 Rate
- = "(" _ r:Float _ ")" { return { rate: parseFloat(r) } }
+ = "rate={" _ r:Float _ "}" { return { rate: parseFloat(r) } }
+ / "rate=" r:Float { return { rate: parseFloat(r) } }
 
 Command
- = "{" command:[^\}]+ "}" { return { command } }
+ = "command={" command:EscapedString "}" { return { command } }
+ / "command=" command:AttrString { return { command } }
 
 Key
- = "'\\" key:. "'" { return { key } }
- / "'" key:. "'" { return { key } }
+ = "key={" key:EscapedChar "}" { return { key } }
+ / "key=" key:AttrChar { return { key } }
 
 Reward
- = "<" _ r:SignedInteger _ ">" { return { reward: parseInt(r) } }
+ = "reward={" _ r:SignedInteger _ "}" { return { reward: parseInt(r) } }
+ / "reward=" r:SignedInteger { return { reward: parseInt(r) } }
 
 Sound
- = "#" sound:[^#]* "#" { return { sound } }
+ = "sound={" sound:EscapedString "}" { return { sound } }
+ / "sound=" sound:AttrString { return { sound } }
 
 Caption
- = "\"" caption:[^\"]* "\"" { return caption }
+ = "caption={" caption:EscapedString "}" { return caption }
+ / "caption=" caption:AttrString { return caption }
 
 
 NonZeroInteger
@@ -227,6 +249,20 @@ Float
   = (NonZeroInteger / "0" / "") "." [0-9]*
   / NonZeroInteger
   / "0"
+
+EscapedString
+ = c:EscapedChar s:EscapedString { return c + s }
+ / EscapedChar
+ / ""
+
+EscapedChar
+ = [^\\}]
+ / "\\" c:. { return c }
+
+AttrString
+ = AttrChar+ { return text() }
+
+AttrChar = [A-Za-z0-9_]
 
 _sep
  = [ \t\n\r]+

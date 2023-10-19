@@ -3,7 +3,22 @@ const escape = (c, special) => {
     special = ' !"#$%&\'()*+,-./0123456789:;<=>?@[\\]^_`{|}~';
   return (special.indexOf(c) >= 0 ? '\\' : '') + c;
 }
-const lhsStateChar = (t) => {
+const escapeAttr = (c) => escape (c, '\\}');
+
+const topStateChar = (t) => {
+  if (typeof(t) === 'string')
+    return t;
+  switch (t.op) {
+  case '+':
+  case '-':
+  case '*':
+    return '(' + makeStateChar(t) + ')';
+  default:
+    return makeStateChar(t);
+  }
+}
+
+const makeStateChar = (t) => {
   if (typeof(t) === 'string')
     return t;
   switch (t.op) {
@@ -14,9 +29,9 @@ const lhsStateChar = (t) => {
   case 'any':
     return '*';
   case 'class':
-    return '[' + t.chars.map(lhsStateChar).join('') + ']';
+    return '[' + t.chars.map(makeStateChar).join('') + ']';
   case 'negated':
-    return '[^' + t.chars.map(lhsStateChar).join('') + ']';
+    return '[^' + t.chars.map(makeStateChar).join('') + ']';
   case 'neighborhood':
     return '@' + t.neighborhood + '(' + vecExpr(t.origin) + ')';
   case 'clock':
@@ -33,7 +48,7 @@ const lhsStateChar = (t) => {
   case 'integer':
   case 'vector':
   case 'state':
-    return vecExpr(t) + ';';
+    return vecExpr(t);
   default:
     throw new Error ("Unrecognized op '" + t.op + "' in " + JSON.stringify(t));
     return undefined;
@@ -53,9 +68,9 @@ const vecExpr = (t) => {
   case 'integer':
     return '@int(' + t.n + ')';
   case 'vector':
-    return '@(' + t.x + ',' + t.y + ')';
+    return '@vec(' + t.x + ',' + t.y + ')';
   case 'state':
-    return '$' + t.group + '/' + t['char'];
+    return '$' + t.group + '#' + t['char'];
   case 'matrix':
     return '%' + t.matrix;
   default:
@@ -69,7 +84,7 @@ const multiplicativeVecExpr = (t) => {
 }
 
 const termWithState = (t) => {
-  return t.type + (t.state ? ("/" + t.state.map(lhsStateChar).join('')) : '');
+  return t.type + (t.state ? ("/" + t.state.map(topStateChar).join('')) : '');
 }
 
 const lhsTerm = (t) => {
@@ -110,20 +125,32 @@ const rhsTerm = (t) => {
   return termWithState(t);
 };
 
-const makeRhs = (rhs) => {
-  return rhs.map(rhsTerm).join(' ');
+const makeRhs = (rhs, sep) => {
+  return rhs.map(rhsTerm).join(sep);
 };
 
 function serialize (rules) {
+  const attrs = (rule) =>
+    (rule.rate ? (' rate={' + rule.rate + '}') : '')
+    + (rule.command ? (' command={' + escapeAttr(rule.command) + '}') : '')
+    + (rule.key ? (' key={' + escapeAttr(rule.key) + '}') : '')
+    + (rule.reward ? (' reward={' + rule.reward + '}') : '')
+    + (rule.sound ? (' sound={' + escapeAttr(rule.sound) + '}') : '')
+    + (rule.caption ? (' caption={' + escapeAttr(rule.caption) + '}') : '');
   return rules.map ((rule) => {
-    return makeLhs(rule.lhs) + ' : ' + makeRhs(rule.rhs)
-      + (rule.rate ? (' (' + rule.rate + ')') : '')
-      + (rule.command ? (' {' + escape(rule.command,'}') + '}') : '')
-      + (rule.key ? (' \'' + escape(rule.key,'\'') + '\'') : '')
-      + (rule.reward ? (' <' + rule.reward + '>') : '')
-      + (rule.sound ? (' #' + escape(rule.sound,'#') + '#') : '')
-      + (rule.caption ? (' "' + escape(rule.caption,'"') + '"') : '')
-      + ".\n";
+    switch (rule.type) {
+      case 'transform': {
+        const a = attrs(rule);
+        return makeLhs(rule.lhs) + ' : ' + makeRhs(rule.rhs,' ')
+        + (a.length ? ("," + a) : "")
+        + ".\n";
+      }
+      case 'inherit':
+        return lhsTerm(rule.child) + ' = ' + makeRhs(rule.parents,', ') + ".\n";
+      default:
+        throw new Error ("Unrecognized rule type '" + rule.type + "' in " + JSON.stringify(rule));
+        return undefined;
+      }
   }).join("");
 }
 

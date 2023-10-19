@@ -15,8 +15,19 @@ const opt = getopt.create([
     .parseSystem() // parse command line
 
 opt.argv.forEach ((filename) => {
-  const text = fs.readFileSync(filename).toString();
-  const grammar = parse(text);
+  const text = fs.readFileSync(filename).toString() || '';
+  let grammar;
+  try {
+    grammar = parse(text);
+  } catch (e) {
+    const line = text.split("\n")[e.location.start.line - 1];
+    const arrow = '-'.repeat(e.location.start.column - 1) + '^';
+    console.error(`File "${filename}", line ${e.location.start.line}, column ${e.location.start.column}:`);
+    console.error(e.message);
+    console.error(line);
+    console.error(arrow);
+    process.exit();
+  }
   const out = serialize(grammar);
   console.log(out);
 })

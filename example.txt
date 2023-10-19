@@ -1,24 +1,26 @@
-xyz/@int(3); : x/@1;.
+xyz/@int(3) : x/@1.
 
 not ^not: not.
 
+a = b.
+a/?? = b/$1#1, c/$1#2.
 wild/*: wild.
 wild/xy*: wild.
 
-l (a|b|c/@1;) : $1.
+l (a|b|c/@1) : $1.
 
 l ^(x|y): $1.
 
-a/x?[@(0,0);@(1,1);] b/@r-%h@f+@l; : c/@f; d/X\..
-
+a/x?[@vec(0,0)@vec(1,1)] b/(@r-%h@f+@l) d/(@r-%h@f+@l) : c/@f d/X\..
+a:b, rate=2 command=left.
 x y:z.
-a:b (2) {x} <4> .
-a:d (2) <3> {x} .
+a:b,  rate={2} command={x} reward={4} .
+a:d, rate=2 reward=3 command={x} .
 
 a >@n> b:c.
 
-z/[@moore(@f)] : z/@f;.
+z/[@moore(@f)] : z/@f.
 
-player crate >l> * : $3 player crate {z} .
-player >e> crate _ : _ $1 $2 {x} 'x' .
+player crate >l> * : $3 player crate, command={z} .
+player >e> crate _ : _ $1 $2, key={x} .
 
