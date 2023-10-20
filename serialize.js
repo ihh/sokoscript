@@ -89,7 +89,7 @@ const stateSuffix = (t) => {
 }
 
 const termWithState = (t) => {
-  return t.type + stateSuffix(t);
+  return (typeof(t.type) === 'number' ? 't' : '') + t.type + stateSuffix(t);
 }
 
 const lhsTerm = (t) => {

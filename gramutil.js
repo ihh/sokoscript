@@ -1,7 +1,23 @@
 import { lhsTerm } from './serialize.js';
 
 const makeGrammarIndex = (rules) => {
-    let transform = {}, parents = {};
+    let transform = {}, parents = {}, types = ['_'], seenType = {'_':true};
+    const markTerm = (term) => {
+        if (term.op === 'negterm')
+            markTerm (term.term);
+        else if (term.op === 'alt')
+            term.alt.forEach ((t) => markTerm);
+        else if (term.op !== 'any' && term.op !== 'group' && term.op !== 'prefix') {
+            if (typeof(term.type) === 'undefined')
+                throw new Error('undefined type in term: ' + JSON.stringify(term))
+            markType (term.type);
+        }
+    };
+    const markType = (type) => {
+        if (!seenType[type])
+            types.push (type);
+        seenType[type] = true;
+    };
     rules.forEach ((rule) => {
         let prefix;
         switch (rule.type) {
@@ -9,10 +25,14 @@ const makeGrammarIndex = (rules) => {
                 prefix = rule.lhs[0].type;
                 transform[prefix] = transform[prefix] || [];
                 transform[prefix].push (rule);
+                rule.lhs.forEach (markTerm);
+                rule.rhs.forEach (markTerm);
                 break;
             case 'inherit':
                 prefix = rule.child;
                 parents[prefix] = (parents[prefix] || []).concat (rule.parents);
+                markType (rule.child);
+                rule.parents.forEach (markType);
                 break;
             case 'comment':
                 break;
@@ -39,7 +59,9 @@ const makeGrammarIndex = (rules) => {
         isAncestor[ancestor][descendant] = true
     }));
     Object.keys(isAncestor).forEach ((ancestor) => descendants[ancestor] = Object.keys(isAncestor[ancestor]).sort())
-    return { transform, ancestors, descendants };
+    let typeIndex = {};
+    types.forEach ((type, n) => typeIndex[type] = n);
+    return { transform, ancestors, descendants, types, typeIndex };
 }
 
 const replaceSubjectType = (rule, type) => {
@@ -68,8 +90,7 @@ const replaceTermWithAlt = (term, descendants) => {
     return term;
 }
 
-const expandInherits = (rules) => {
-    const index = makeGrammarIndex (rules);
+const expandInherits = (index) => {
     const explicit  = Object.assign (...Object.keys(index.transform).map ((prefix) => ({
         [prefix]: index.transform[prefix].map ((rule) => ({
             ...rule,
@@ -82,7 +103,24 @@ const expandInherits = (rules) => {
                 replaceSubjectType(rule,prefix))), explicit[prefix] || [])
     })));
 
-  return {...explicit, ...inherited};
+    return { types: index.types, typeIndex: index.typeIndex, transform: {...explicit, ...inherited} };
+};
+
+const compileTypes = (rules) => {
+    const index = expandInherits (makeGrammarIndex (rules));
+    const compileType = (t) => {
+        if (t.op === 'negterm')
+            return { ...t, term: compileType (t.term) };
+        if (t.op === 'alt')
+            return { ...t, alt: t.alt.map (compileType) };
+        return { ...t, type: index.typeIndex[t.type] }
+    };
+    const transform = index.types.map ((type) =>
+        (index.transform[type] || []).map ((rule) =>
+            rule.type === 'transform'
+            ? { ...rule, lhs: rule.lhs.map(compileType), rhs: rule.rhs.map(compileType) }
+            : rule ));
+    return { transform, types: index.types }
 }
 
-export { expandInherits }
+export { makeGrammarIndex, expandInherits, compileTypes }
