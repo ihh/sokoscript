@@ -160,5 +160,5 @@ function applyTransformRule (board, x, y, dir, rule) {
 
 
 // TODO:
-// Integer-robust random waiting time until next event
-// Integer-robust random selection of next event
+// Random waiting time until next event & selection of next event
+// Ultimately these could be integer-robust for lightning-fast implementation, but that isn't important yet! Premature optimization!

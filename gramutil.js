@@ -46,7 +46,10 @@ function expandInherits (rules) {
     Object.keys(index.ancestors).forEach ((prefix) =>
         transform[prefix] = index.ancestors[prefix].reduce ((rules,ancs) =>
             rules.concat((index.transform[ancs] || []).map ((rule) => replaceSubjectType(rule,prefix))), transform[prefix] || []));
-    return transform;
+
+  // TODO: implement inheritance in positions other than $1, using alts
+
+  return transform;
 }
 
 module.exports = { expandInherits }
