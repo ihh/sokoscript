@@ -162,4 +162,4 @@ function serialize (rules) {
   }).join("");
 }
 
-module.exports = { serialize }
+module.exports = { serialize, lhsTerm }

@@ -1,3 +1,5 @@
+const serialize = require('./serialize');
+
 function makeGrammarIndex (rules) {
     let transform = {}, parents = {};
     rules.forEach ((rule) => {
@@ -29,27 +31,56 @@ function makeGrammarIndex (rules) {
             return { [child]: getAncestors(child) }
         })
     );
-    return { transform, ancestors };
+    let isAncestor = {}, descendants = {};
+    Object.keys(ancestors).forEach ((descendant) => ancestors[descendant].forEach ((ancestor) => {
+        isAncestor[ancestor] = isAncestor[ancestor] || {}
+        isAncestor[ancestor][descendant] = true
+    }));
+    Object.keys(isAncestor).forEach ((ancestor) => descendants[ancestor] = Object.keys(isAncestor[ancestor]).sort())
+    return { transform, ancestors, descendants };
 }
 
-function replaceSubjectType (rule, type) {
+const replaceSubjectType = (rule, type) => {
     let lhs = rule.lhs.slice(0);
     lhs[0] = { ...lhs[0], type }
     return { ...rule, lhs }
 }
 
+const replaceTermWithAlt = (term, descendants) => {
+    if (term.op === 'negterm')
+        return { op: term.op, term: replaceTermWithAlt (term.term, descendants) }
+    if (term.op === 'alt')
+        return { 
+                    op: term.op,
+                    alt: term.alt.map ((t) => replaceTermWithAlt (t, descendants))
+                        .reduce ((alt, t) => alt.concat(t.op==='alt' ? t.alt : [t]), [])
+                        .reduce ((memo, t) => {
+                            const tstr = serialize.lhsTerm(t);
+                            if (memo.seen[tstr])
+                                return memo;
+                            return { alt: memo.alt.concat([t]), seen: { ...memo.seen, [tstr]: true }}
+                        }, { alt: [], seen: {} }).alt
+                }
+    if (descendants[term.type])
+        return { op: 'alt', alt: [term].concat (descendants[term.type].map ((descendant) => ({ ...term, type: descendant }))) }
+    return term;
+}
+
 function expandInherits (rules) {
     const index = makeGrammarIndex (rules);
-    console.warn(index.ancestors)
-    let transform  = {};
-    Object.keys(index.transform).forEach ((prefix) => transform[prefix] = index.transform[prefix].slice(0));
-    Object.keys(index.ancestors).forEach ((prefix) =>
-        transform[prefix] = index.ancestors[prefix].reduce ((rules,ancs) =>
-            rules.concat((index.transform[ancs] || []).map ((rule) => replaceSubjectType(rule,prefix))), transform[prefix] || []));
+    const explicit  = Object.assign (...Object.keys(index.transform).map ((prefix) => ({
+        [prefix]: index.transform[prefix].map ((rule) => ({
+            ...rule,
+            lhs: [rule.lhs[0]].concat (rule.lhs.slice(1).map ((term) => replaceTermWithAlt (term, index.descendants)))
+        }))
+    })));
+    const inherited = Object.assign (...Object.keys(index.ancestors).map ((prefix) => ({
+        [prefix]: index.ancestors[prefix].reduce ((rules,ancs) =>
+            rules.concat((explicit[ancs] || []).map ((rule) =>
+                replaceSubjectType(rule,prefix))), explicit[prefix] || [])
+    })));
 
-  // TODO: implement inheritance in positions other than $1, using alts
-
-  return transform;
+  return {...explicit, ...inherited};
 }
 
 module.exports = { expandInherits }

@@ -16,6 +16,8 @@ l (a|b|c/@1) : $1.
 
 l ^(x|y): $1.
 
+l ^b: $1.
+
 a/x?[@vec(0,0)@vec(1,1)] b/(@r-%h@f+@l) d/(@r-%h@f+@l) : c/@f d/X\..
 a:b, rate=2 command=left.
 x y:z.
