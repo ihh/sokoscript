@@ -12,6 +12,8 @@ d:d d.
 wild/*: wild.
 wild/xy*: wild.
 
+// A comment...
+
 l (a|b|c/@1) : $1.
 
 l ^(x|y): $1.

@@ -42,6 +42,8 @@ RuleSet
  = r:Rule _ "." _ s:RuleSet &{ return validateInheritance(r,s) } { return [r].concat(s) }
  / r:Rule _ "." _ { return [r] }
  / r:Rule _ { return [r] }
+ / c:Comment _ s:RuleSet { return [c].concat (s) }
+ / c:Comment _ { return [c] }
 
 Rule
  = lhs:Lhs
@@ -57,6 +59,10 @@ Rule
   { return { type: 'transform', lhs, rhs } }
  / child:Prefix _ "=" _ parents:InheritRhs
   { return { type: 'inherit', child, parents } }
+
+Comment
+ = "//" c:[^\n]+
+  { return { type: 'comment', comment: c.join('') } }
 
 Attributes
  = first:Attribute rest:(_ Attribute)*

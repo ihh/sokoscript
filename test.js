@@ -1,12 +1,14 @@
 #!/usr/bin/env node
 // emacs mode -*-JavaScript-*-
 
-const serialize = require('./serialize').serialize;
-const parse = require('./grammar').parse;
-const expandInherits = require('./gramutil').expandInherits;
+import { serialize } from './serialize.js';
+import { expandInherits } from './gramutil.js';
 
-const fs = require('fs'),
-      getopt = require('node-getopt');
+// ugh: https://github.com/pegjs/pegjs/issues/423
+import { parse } from './grammar.js';
+
+import fs from 'fs';
+import getopt from 'node-getopt';
 
 // parse command-line options
 const opt = getopt.create([
@@ -22,12 +24,15 @@ opt.argv.forEach ((filename) => {
   try {
     grammar = parse(text);
   } catch (e) {
-    const line = text.split("\n")[e.location.start.line - 1];
-    const arrow = '-'.repeat(e.location.start.column - 1) + '^';
-    console.error(`File "${filename}", line ${e.location.start.line}, column ${e.location.start.column}:`);
-    console.error(e.message);
-    console.error(line);
-    console.error(arrow);
+    if (e.location) {
+      const line = text.split("\n")[e.location.start.line - 1];
+      const arrow = '-'.repeat(e.location.start.column - 1) + '^';
+      console.error(`File "${filename}", line ${e.location.start.line}, column ${e.location.start.column}:`);
+      console.error(e.message);
+      console.error(line);
+      console.error(arrow);
+    } else
+      console.error(e);
     process.exit();
   }
   if (opt.options.expand) {

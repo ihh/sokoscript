@@ -1,6 +1,6 @@
-const serialize = require('./serialize');
+import { lhsTerm } from './serialize.js';
 
-function makeGrammarIndex (rules) {
+const makeGrammarIndex = (rules) => {
     let transform = {}, parents = {};
     rules.forEach ((rule) => {
         let prefix;
@@ -13,6 +13,8 @@ function makeGrammarIndex (rules) {
             case 'inherit':
                 prefix = rule.child;
                 parents[prefix] = (parents[prefix] || []).concat (rule.parents);
+                break;
+            case 'comment':
                 break;
             default:
                 throw new Error ("Unrecognized rule type '" + rule.type + "' in " + JSON.stringify(rule));
@@ -55,7 +57,7 @@ const replaceTermWithAlt = (term, descendants) => {
                     alt: term.alt.map ((t) => replaceTermWithAlt (t, descendants))
                         .reduce ((alt, t) => alt.concat(t.op==='alt' ? t.alt : [t]), [])
                         .reduce ((memo, t) => {
-                            const tstr = serialize.lhsTerm(t);
+                            const tstr = lhsTerm(t);
                             if (memo.seen[tstr])
                                 return memo;
                             return { alt: memo.alt.concat([t]), seen: { ...memo.seen, [tstr]: true }}
@@ -66,7 +68,7 @@ const replaceTermWithAlt = (term, descendants) => {
     return term;
 }
 
-function expandInherits (rules) {
+const expandInherits = (rules) => {
     const index = makeGrammarIndex (rules);
     const explicit  = Object.assign (...Object.keys(index.transform).map ((prefix) => ({
         [prefix]: index.transform[prefix].map ((rule) => ({
@@ -83,4 +85,4 @@ function expandInherits (rules) {
   return {...explicit, ...inherited};
 }
 
-module.exports = { expandInherits }
+export { expandInherits }

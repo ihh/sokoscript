@@ -52,9 +52,9 @@ const makeStateChar = (t) => {
     return vecExpr(t);
   default:
     throw new Error ("Unrecognized op '" + t.op + "' in " + JSON.stringify(t));
-    return undefined;
   }
 }
+
 const vecExpr = (t) => {
   switch (t.op) {
   case '+':
@@ -77,7 +77,6 @@ const vecExpr = (t) => {
     return '%' + t.matrix;
   default:
     throw new Error ("Unrecognized op '" + t.op + "' in " + JSON.stringify(t));
-    return undefined;
   }
 }
 const multiplicativeVecExpr = (t) => {
@@ -137,7 +136,7 @@ const makeRhs = (rhs, sep) => {
   return rhs.map(rhsTerm).join(sep);
 };
 
-function serialize (rules) {
+const serialize = (rules) => {
   const attrs = (rule) =>
     (rule.rate ? (' rate={' + rule.rate + '}') : '')
     + (rule.command ? (' command={' + escapeAttr(rule.command) + '}') : '')
@@ -155,11 +154,12 @@ function serialize (rules) {
       }
       case 'inherit':
         return rule.child + ' = ' + rule.parents.join(', ') + ".\n";
+      case 'comment':
+        return '//' + rule.comment + "\n";
       default:
         throw new Error ("Unrecognized rule type '" + rule.type + "' in " + JSON.stringify(rule));
-        return undefined;
       }
   }).join("");
 }
 
-module.exports = { serialize, lhsTerm }
+export { serialize, lhsTerm }

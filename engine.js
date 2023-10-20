@@ -1,6 +1,6 @@
-const lookups = require('./lookups');
+import { lookups } from './lookups';
 
-function escapeRegex(string) {
+const escapeRegex = (string) => {
     return string.replace(/[/\-\\^$*+?.()|[\]{}]/g, '\\$&');
 }
 
@@ -86,7 +86,6 @@ class Matcher {
         return this.termCell[t.group-1].state.charAt(t.char-1);
       default:
         throw new Error ("Unrecognized op '" + t.op + "' in " + JSON.stringify(t));
-        return undefined;
       }
     }
 
@@ -104,7 +103,6 @@ class Matcher {
             return lookups.charVecLookup[this.computeStateChar(t.arg)];
         default:
           throw new Error ("Unrecognized op '" + addr.op + "' in " + JSON.stringify(addr));
-          return undefined;
       }
     }
 
@@ -151,7 +149,7 @@ class Matcher {
     }
 };
 
-function applyTransformRule (board, x, y, dir, rule) {
+const applyTransformRule = (board, x, y, dir, rule) => {
     const matcher = rule.lhs.reduce ((matcher, term, pos) => matcher.matchLhsCell(term,pos), new Matcher (board, x, y, dir) );
     if (!matcher.failed)
         rule.rhs.forEach ((term, pos) => matcher.updateCell (pos, term));
