@@ -2,8 +2,13 @@ xyz/@int(3) : x/@1.
 
 not ^not: not.
 
-a = b.
-a/?? = b/$1#1, c/$1#2.
+z = a.
+z = b, c.
+c = d.
+
+
+d:d d.
+
 wild/*: wild.
 wild/xy*: wild.
 

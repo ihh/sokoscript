@@ -154,7 +154,7 @@ function serialize (rules) {
         + ".\n";
       }
       case 'inherit':
-        return lhsTerm(rule.child) + ' = ' + makeRhs(rule.parents,', ') + ".\n";
+        return rule.child + ' = ' + rule.parents.join(', ') + ".\n";
       default:
         throw new Error ("Unrecognized rule type '" + rule.type + "' in " + JSON.stringify(rule));
         return undefined;

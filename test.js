@@ -3,12 +3,14 @@
 
 const serialize = require('./serialize').serialize;
 const parse = require('./grammar').parse;
+const expandInherits = require('./gramutil').expandInherits;
 
 const fs = require('fs'),
       getopt = require('node-getopt');
 
 // parse command-line options
 const opt = getopt.create([
+  ['x' , 'expand'           , 'expand inheritance'],
   ['h' , 'help'             , 'display this help message']
 ])              // create Getopt instance
     .bindHelp()     // bind option 'help' to default action
@@ -27,6 +29,12 @@ opt.argv.forEach ((filename) => {
     console.error(line);
     console.error(arrow);
     process.exit();
+  }
+  if (opt.options.expand) {
+    let transform = expandInherits (grammar);
+    let rules = [];
+    Object.keys(transform).sort().forEach((type) => rules = rules.concat(transform[type]));
+    grammar = rules;
   }
   const out = serialize(grammar);
   console.log(out);

@@ -158,4 +158,7 @@ function applyTransformRule (board, x, y, dir, rule) {
     return !matcher.failed;
 }
 
-// TODO: write applyInheritRule (need to index rules)
+
+// TODO:
+// Integer-robust random waiting time until next event
+// Integer-robust random selection of next event

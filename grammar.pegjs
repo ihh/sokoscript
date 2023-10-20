@@ -18,10 +18,28 @@
                                                               matchedStateChars: memo.matchedStateChars.concat ([matchedStateChars(term)]) }),
                                                             { result: true, matchedStateChars: [] }).result;
   const validateRhs = (lhs, rhs) => rhs.reduce ((result, term) => result && reduceAlt (term, (term) => validateState(term,lhs.map(matchedStateChars),false)), true);
+
+  const validateInheritance = (rule, rules) => {
+    if (rule.type === 'transform')
+      return true;
+    let parents = {}, checked = {};
+    rules.filter((r)=>r.type==='inherit').forEach ((r) => parents[r.child] = (parents[r.child] || []).concat (r.parents));
+    const isValidAncestor = (p) => {
+      if (checked[p])
+        return true;
+      checked[p] = true;
+      if (p === rule.child) {
+        console.error ("Type '" + rule.child + "' inherits from itself");
+        return false;
+      }
+      return !parents[p] || reducePred (parents[p], isValidAncestor);
+    }
+    return reducePred (rule.parents, isValidAncestor);
+  }
 }
 
 RuleSet
- = r:Rule _ "." _ s:RuleSet { return [r].concat(s) }
+ = r:Rule _ "." _ s:RuleSet &{ return validateInheritance(r,s) } { return [r].concat(s) }
  / r:Rule _ "." _ { return [r] }
  / r:Rule _ { return [r] }
 
@@ -37,10 +55,7 @@ Rule
    _ ":" _ rhs:Rhs
  &{ return validateRhs(lhs,rhs) }
   { return { type: 'transform', lhs, rhs } }
- / child:Subject
- &{ return validateLhs ([child]) }
-    _ "=" _ parents:InheritRhs
- &{ return validateRhs ([child],parents) }
+ / child:Prefix _ "=" _ parents:InheritRhs
   { return { type: 'inherit', child, parents } }
 
 Attributes
@@ -57,8 +72,8 @@ Attributes
 
 
 InheritRhs
- = first:RhsTerm rest:(_ "," _ RhsTerm)+ { return [first].concat (rest.map ((r) => r[3])) }
- / t:RhsTerm { return [t] }
+ = first:Prefix rest:(_ "," _ Prefix)+ { return [first].concat (rest.map ((r) => r[3])) }
+ / p:Prefix { return [p] }
 
 Attribute = Rate / Command / Key / Reward / Sound / Caption
 
