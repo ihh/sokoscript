@@ -2,21 +2,21 @@
   const validatePositionals = (expr, matchedStateChars, extraLoc) => {
     if (expr.group === 0)
       expr.group = matchedStateChars.length;
-    return (expr.hasOwnProperty('group')
+    return ('group' in expr
         ? ((expr.group <= matchedStateChars.length + (extraLoc && expr.op==='location' ? 1 : 0))
-          && (expr.hasOwnProperty('char') ? (expr.char <= matchedStateChars[expr.group-1]) : true))
+          && ('char' in expr ? (expr.char <= matchedStateChars[expr.group-1]) : true))
         : true)
       && ['left','right','arg']
-          .filter((prop)=>expr.hasOwnProperty(prop))
+          .filter((prop)=>prop in expr)
           .reduce ((result, prop) => result && validatePositionals (expr[prop], matchedStateChars), true);
   };
 
   const reducePred = (args, pred) => args.reduce ((result, arg) => result && pred(arg), true);
   const altList = (alt) => alt.op === 'alt' ? alt.alt : [alt];
   const reduceAlt = (alt, pred) => alt.op === 'negterm' ? reduceAlt (alt.term, pred) : reducePred (altList(alt), pred);
-  const validateState = (term, msc, extraLoc) => !term.hasOwnProperty('state') || reducePred (term.state, (char) => validatePositionals(char,msc,extraLoc));
-  const validateAddr = (term, msc) => !term.hasOwnProperty('addr') || validatePositionals(term.addr,msc,false);
-  const matchedStateChars = (alt) => altList(alt).length && Math.min.apply (null, altList(alt).map (term => term.hasOwnProperty('state') ? term.state.filter((s)=>!(s.op==='any')).length : 0));
+  const validateState = (term, msc, extraLoc) => !('state' in term) || reducePred (term.state, (char) => validatePositionals(char,msc,extraLoc));
+  const validateAddr = (term, msc) => !('addr' in term) || validatePositionals(term.addr,msc,false);
+  const matchedStateChars = (alt) => altList(alt).length && Math.min.apply (null, altList(alt).map (term => ('state' in term) ? term.state.filter((s)=>!(s.op==='any')).length : 0));
   const validateLhs = (lhs) => lhs.reduce ((memo, term) => ({ result: memo.result && reduceAlt (term, (term) => validateState(term,memo.matchedStateChars,true) && validateAddr(term,memo.matchedStateChars)),
                                                               matchedStateChars: memo.matchedStateChars.concat ([matchedStateChars(term)]) }),
                                                             { result: true, matchedStateChars: [] }).result;

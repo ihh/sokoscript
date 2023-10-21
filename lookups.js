@@ -105,10 +105,8 @@ const charPermLookup = {
               anti: tabulateCharFunc (rotateNeighborhoodCounterClockwise) }
 }
 
-// precompute quick lookups (e.g. "@ER" for "~R * @E = @R when dir is E" i.e. char for south)
-const absDirs = 'NESW'.split(''), relDirs = 'FBLR'.split('');
 const charLookup = {
-    absDir: Object.assign (...absDirs.map ((d) => ({ [d]: vec2char (dirVec[d]) })))
+    absDir: Object.assign (...dirs.map ((d) => ({ [d]: vec2char (dirVec[d]) })))
 };
 
 // precompute char classes, e.g. neighborhoods of each cell

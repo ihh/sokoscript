@@ -1,11 +1,7 @@
 #!/usr/bin/env node
-// emacs mode -*-JavaScript-*-
 
-import { serialize } from './serialize.js';
-import { makeGrammarIndex, expandInherits, compileTypes } from './gramutil.js';
-
-// ugh: https://github.com/pegjs/pegjs/issues/423
-import { parse } from './grammar.js';
+import { serialize } from '../serialize.js';
+import { makeGrammarIndex, expandInherits, compileTypes, parseOrUndefined } from '../gramutil.js';
 
 import fs from 'fs';
 import getopt from 'node-getopt';
@@ -21,21 +17,7 @@ const opt = getopt.create([
 
 opt.argv.forEach ((filename) => {
   const text = fs.readFileSync(filename).toString() || '';
-  let rules;
-  try {
-    rules = parse(text);
-  } catch (e) {
-    if (e.location) {
-      const line = text.split("\n")[e.location.start.line - 1];
-      const arrow = '-'.repeat(e.location.start.column - 1) + '^';
-      console.error(`File "${filename}", line ${e.location.start.line}, column ${e.location.start.column}:`);
-      console.error(e.message);
-      console.error(line);
-      console.error(arrow);
-    } else
-      console.error(e);
-    process.exit();
-  }
+  let rules = parseOrUndefined (text, (err) => { console.error(`File "${filename}:\n` + err); process.exit() });
   if (opt.options.compile) {
     if (opt.options.expand)
       console.warn ("Warning: specifying --expand with --compile is redundant")

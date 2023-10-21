@@ -1,3 +1,4 @@
+import { parse, SyntaxError } from './grammar.js';
 import { lhsTerm } from './serialize.js';
 
 const makeGrammarIndex = (rules) => {
@@ -42,7 +43,7 @@ const makeGrammarIndex = (rules) => {
         }
     })
     let ancestors = Object.assign (
-        ...Object.keys(parents).map ((child) => {
+        ...[{}].concat (Object.keys(parents).map ((child) => {
             let seen = {};
             const getAncestors = (prefix) => {
                 if (seen[prefix] || !parents[prefix])
@@ -52,7 +53,7 @@ const makeGrammarIndex = (rules) => {
             };
             return { [child]: getAncestors(child) }
         })
-    );
+    ));
     let isAncestor = {}, descendants = {};
     Object.keys(ancestors).forEach ((descendant) => ancestors[descendant].forEach ((ancestor) => {
         isAncestor[ancestor] = isAncestor[ancestor] || {}
@@ -91,24 +92,24 @@ const replaceTermWithAlt = (term, descendants) => {
 }
 
 const expandInherits = (index) => {
-    const explicit  = Object.assign (...Object.keys(index.transform).map ((prefix) => ({
+    const explicit  = Object.assign (...[{}].concat (Object.keys(index.transform).map ((prefix) => ({
         [prefix]: index.transform[prefix].map ((rule) => ({
             ...rule,
             lhs: [rule.lhs[0]].concat (rule.lhs.slice(1).map ((term) => replaceTermWithAlt (term, index.descendants)))
         }))
-    })));
-    const inherited = Object.assign (...Object.keys(index.ancestors).map ((prefix) => ({
+    }))));
+    const inherited = Object.assign (...[{}].concat (Object.keys(index.ancestors).map ((prefix) => ({
         [prefix]: index.ancestors[prefix].reduce ((rules,ancs) =>
             rules.concat((explicit[ancs] || []).map ((rule) =>
                 replaceSubjectType(rule,prefix))), explicit[prefix] || [])
-    })));
+    }))));
 
     return { types: index.types, typeIndex: index.typeIndex, transform: {...explicit, ...inherited} };
 };
 
 const compileTypes = (rules) => {
     const index = expandInherits (makeGrammarIndex (rules));
-    const { types, typeIndex } = index.types;
+    const { types, typeIndex } = index;
     const compileType = (t) => {
         if (t.op === 'negterm')
             return { ...t, term: compileType (t.term) };
@@ -122,7 +123,7 @@ const compileTypes = (rules) => {
             ? { rate: 1, ...rule, lhs: rule.lhs.map(compileType), rhs: rule.rhs.map(compileType) }
             : rule ));
     let command = types.map(()=>({})), key = types.map(()=>({}));
-    types.forEach ((type) => transform[type].forEach ((rule) => {
+    types.forEach ((_name, type) => transform[type].forEach ((rule) => {
         if (rule.command)
             command[type][rule.command] = (command[type][rule.command] || []).concat ([rule]);
         if (rule.key)
@@ -132,4 +133,29 @@ const compileTypes = (rules) => {
     return { transform, types, typeIndex, rateByType, command, key }
 }
 
-export { makeGrammarIndex, expandInherits, compileTypes }
+const syntaxErrorMessage = (e, text) => {
+    let msg;
+    if (e instanceof SyntaxError) {
+        const line = text.split("\n")[e.location.start.line - 1];
+        const arrow = '-'.repeat(e.location.start.column - 1) + '^';
+        msg = `Line ${e.location.start.line}, column ${e.location.start.column}:\n`
+              + e.message + "\n"
+              + line + "\n"
+              + arrow + "\n";
+    } else
+        msg = e.message;
+    return msg;
+}
+
+const parseOrUndefined = (text, error) => {
+    let rules;
+    try {
+        rules = parse(text);
+    } catch (e) {
+        if (error !== false)
+            (error || console.error) (syntaxErrorMessage(e,text));
+    }
+    return rules;
+}
+
+export { makeGrammarIndex, expandInherits, compileTypes, syntaxErrorMessage, parseOrUndefined }

@@ -1,5 +1,5 @@
-import { lookups } from './lookups';
-import { applyTransformRule } from './engine';
+import * as lookups from './lookups.js';
+import { applyTransformRule } from './engine.js';
 
 // Time-efficient data structure for storing a set of ints in the range [0,n) where n is a power of 2
 // Uses 2n memory.
@@ -29,12 +29,13 @@ class RangeCounter {
         return this.levelCount[this.log2n];
     }
 
+    // k is 0-based
     kthElement (k) {
         let index = 0;
         for (let level = this.log2n - 1; level >= 0; --level) {
             index = index << 1;
-            if (k > this.levelCount[index]) {
-                k -= this.levelCount[index];
+            if (k + 1 > this.levelCount[level][index]) {
+                k -= this.levelCount[level][index];
                 ++index;
             }
         }
@@ -60,7 +61,8 @@ class Board {
     }
 
     xy2index (x, y) {
-        return y * this.size + x;
+        const size = this.size;
+        return (((y % size) + size) % size) * size + (((x % size) + size) % size);
     }
 
     getCell (x, y) {
@@ -68,11 +70,11 @@ class Board {
     }
 
     setCell (x, y, newValue) {
-        this.setCellByIndex (xy2index (x, y));
+        this.setCellByIndex (this.xy2index (x, y), newValue);
     }
 
     setCellByIndex (index, newValue) {
-            const oldValue = this.cell[index];
+        const oldValue = this.cell[index];
         if (newValue.type !== oldValue.type) {
             let oldByType = this.byType[oldValue.type];
             let newByType = this.byType[newValue.type];
@@ -82,7 +84,7 @@ class Board {
         if (oldValue.meta && oldValue.meta.id && this.byID[oldValue.meta.id] === index && (!newValue.meta || newValue.meta.id !== oldValue.meta.id))
             delete this.byID[oldValue.meta.id];
         if (newValue.meta && newValue.meta.id && (!oldValue.meta || newValue.meta.id !== oldValue.meta.id)) {
-            if (this.byID.hasOwnProperty(newValue.meta.id)) {
+            if (newValue.meta.id in this.byID) {
                 const prevIndexForNewID = this.byID[newValue.meta.id];
                 let prevCellForNewID = this.cell[prevIndexForNewID];
                 if (prevCellForNewID.meta) {
@@ -112,10 +114,10 @@ class Board {
         const typeRates = this.totalTypeRates();
         const totalRate = sum (typeRates);
         const wait = -Math.log(r1 > 0 ? r1 : Number.MIN_VALUE) / totalRate;
-        let r = r2 * totalWeight;
+        let r = r2 * totalRate;
         let type = 0, w;
         while (r >= 0) {
-            w = weights[type];
+            w = typeRates[type];
             r -= w;
             ++type;
         }
@@ -152,14 +154,15 @@ class Board {
             }
         } else if (msg.type === 'write') {
             const { time, user, cells } = msg;
-            cells.forEach ((cell) => {
-                const { x, y, oldType, oldState, type, state, meta } = cell;
+            cells.forEach ((write) => {
+                const { x, y, oldType, oldState, type, state, meta } = write;
                 const index = this.xy2index(x,y);
                 const cell = this.cell[index];
                 if (typeof(cell.owner) === 'undefined' || user === cell.owner || user === Board.owner)
-                    if (typeof(oldType) === 'undefined' || this.grammar.types[cell.type] === this.oldType)
-                        if (typeof(oldState === 'undefined' || cell.state === this.oldState))
-                            this.setCell (x, y, { type, state, meta });
+                    if (typeof(meta?.owner) === 'undefined' || user === meta.owner)
+                        if (typeof(oldType) === 'undefined' || this.grammar.types[cell.type] === oldType)
+                            if (typeof(oldState === 'undefined' || cell.state === oldState))
+                                this.setCell (x, y, { type, state, meta });
             })
         } else
             console.error ('Unknown message type');
@@ -186,13 +189,18 @@ class Board {
     }
 
     toString() {
-        return JSON.stringify ({ time: this.time, cell: this.cell })
+        return JSON.stringify ({ time: this.time, types: this.grammar.types, cell: this.cell.map ((cell) => [cell.type].concat(cell.state || cell.meta ? [cell.state || ''].concat(cell.meta ? [cell.meta] : []) : [])) })
     }
 
     initFromString (str) {
         const json = JSON.parse (str);
         this.time = json.time;
-        json.cell.forEach ((cell, index) => this.setCellByIndex (index, cell));
+        if (json.cell.length !== this.cell.length)
+            throw new Error ("Tried to load "+json.cell.size()+"-cell board file into "+this.cell.size()+"-cell board");
+        const unknownTypes = json.types.filter ((type) => !(type in this.grammar.typeIndex));
+        if (unknownTypes.length)
+            throw new Error ("Tried to load board with unknown types: "+unknownTypes.join(' '));
+        json.cell.forEach ((type_state_meta, index) => this.setCellByIndex (index, { type: this.grammar.typeIndex[json.types[type_state_meta[0]]], state: type_state_meta[1] || '', ...(type_state_meta[2] ? {meta:type_state_meta[2]} : {})}));
     }
 
     // TODO
@@ -230,3 +238,5 @@ class Board {
     // - Board config includes rates for all writes & commands
     // - Rules include two new attributes: ownerCoins and boardCoins
 }
+
+export { Board };

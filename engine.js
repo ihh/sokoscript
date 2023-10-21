@@ -1,11 +1,11 @@
-import { lookups } from './lookups';
+import * as lookups from './lookups.js';
 
 class Matcher {
     constructor (board, x, y, dir) {
         this.board = board;
         this.x = x;
         this.y = y;
-        this.dir = lookups.charVecLookup.absDir[dir];
+        this.dir = lookups.charLookup.absDir[dir];
         this.termAddr = [];
         this.termCell = [];
         this.failed = false;
@@ -14,7 +14,7 @@ class Matcher {
     getCell (x, y) { return board.getCell (x + this.x, y + this.y); }
     setCell (pos, val) {
         const [x,y] = this.termAddr[pos];
-        return board.setCell (x + this.x, y + this.y, val);
+        return this.board.setCell (x + this.x, y + this.y, val);
     }
 
     matchLhsTerm (t, type, state) {
@@ -24,6 +24,9 @@ class Matcher {
             return t.alt.reduce ((matched, term) => matched || this.matchLhsTerm (term, type, state), false);
         if (t.type !== type)
             return false;
+
+        if (!t.state)
+          return !state.length;
 
         for (let n = 0; n < t.state.length; ++n) {
           const matchStatus = this.matchStateChar (t.state[n], state.charAt(n));
@@ -63,23 +66,23 @@ class Matcher {
         return t;
       case 'clock':
       case 'anti':
-        return lookups.rotate[t.op][this.computeStateChar(t.arg)];
+        return lookups.charPermLookup.rotate[t.op][this.computeStateChar(t.arg)];
       case 'add':
-        return lookups.intAdd[this.computeStateChar(t.right)][this.computeStateChar(t.left)];
+        return lookups.charPermLookup.intAdd[this.computeStateChar(t.right)][this.computeStateChar(t.left)];
       case 'sub':
       case '+':
-        return lookups.vecAdd[this.computeStateChar(t.right)][this.computeStateChar(t.left)];
+        return lookups.charPermLookup.vecAdd[this.computeStateChar(t.right)][this.computeStateChar(t.left)];
       case '-':
-        return lookups.vecSub[this.computeStateChar(t.right)][this.computeStateChar(t.left)];
+        return lookups.charPermLookup.vecSub[this.computeStateChar(t.right)][this.computeStateChar(t.left)];
       case '*':
       case '*':
-        return lookups.matMul[t.left.matrix][this.computeStateChar(t.right)];
+        return lookups.charPermLookup.matMul[t.left.matrix][this.computeStateChar(t.right)];
       case 'location':
         return lookups.vec2char (this.termAddr[t.group-1]);
       case 'reldir':
         return this.getRelativeDir (t.dir);
-      case 'reldir':
-        return lookups.charVecLookup (t.dir);
+      case 'absdir':
+        return lookups.charVecLookup[t.dir];
       case 'integer':
         return lookups.int2char (t.n);
       case 'vector':
@@ -92,19 +95,19 @@ class Matcher {
     }
 
     getRelativeDir (dir) {
-        return lookups.matMul[dir][this.dir];
+        return lookups.charPermLookup.matMul[dir][this.dir];
     }
 
     computeAddr (addr, baseVec) {
       switch (addr.op) {
         case 'absolute':
-            return lookups.charVecLookup[lookups.vecAdd[lookups.absDir[t.dir]][lookups.vec2char(baseVec)]];
+            return lookups.charVecLookup[lookups.charPermLookup.vecAdd[lookups.absDir[t.dir]][lookups.vec2char(baseVec)]];
         case 'relative':
-            return lookups.charVecLookup[lookups.vecAdd[this.getRelativeDir(t.dir)][lookups.vec2char(baseVec)]];
+            return lookups.charVecLookup[lookups.charPermLookup.vecAdd[this.getRelativeDir(addr.dir)][lookups.vec2char(baseVec)]];
         case 'neighbor':
-            return lookups.charVecLookup[lookups.vecAdd[this.computeStateChar(t.arg)][lookups.vec2char(baseVec)]];
+            return lookups.charVecLookup[lookups.charPermLookup.vecAdd[this.computeStateChar(addr.arg)][lookups.vec2char(baseVec)]];
         case 'cell':
-            return lookups.charVecLookup[this.computeStateChar(t.arg)];
+            return lookups.charVecLookup[this.computeStateChar(addr.arg)];
         default:
           throw new Error ("Unrecognized op '" + addr.op + "' in " + JSON.stringify(addr));
       }
@@ -118,9 +121,9 @@ class Matcher {
             else
                 [x,y] = this.computeAddr (term.dir || { op: 'relative', dir: 'F' }, this.termAddr[pos-1], pos);
             this.termAddr.push ([x,y]);
-            const cell = board.getCell (x + this.x, y + this.y);
+            const cell = this.board.getCell (x + this.x, y + this.y);
             const { type, state } = cell;
-            const match = matchLhsTerm (term, type, state);
+            const match = this.matchLhsTerm (term, type, state);
             if (match)
                 this.termCell.push (cell);
         } else
@@ -137,12 +140,11 @@ class Matcher {
         if (t.op === 'prefix') {
             const { type, state, meta } = this.termCell[t.group-1];
             this.termCell[t.group-1] = { type, state };  // at most one cell can inherit metadata
-            return { type,
-                     state: t.state.map(this.computeStateChar.bind(this)).join(''),
-                     meta }
+            const newState = t.state ? t.state.map(this.computeStateChar.bind(this)).join('') : '';
+            return { type, state: newState, meta }
         }
-        return { type: t.type,
-                 state: t.state.map(this.computeStateChar.bind(this)).join('') }
+        const state = t.state ? t.state.map(this.computeStateChar.bind(this)).join('') : '';
+        return { type: t.type, state }
     }
     
     updateCell (pos, term) {
