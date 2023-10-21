@@ -5,6 +5,8 @@ const dirVec = { N: [0,-1],
                  S: [0,1],
                  W: [-1,0] };
 
+const dirs = ['N','E','S','W'];
+
 const matrices = { F: [[1,0],[0,1]],
                    R: [[0,-1],[1,0]],
                    B: [[-1,0],[0,-1]],
@@ -119,4 +121,4 @@ const charClassLookup = tabulateOperators (Object.keys(neighborhood), (nh) => ta
 // precompute char->vector mapping
 const charVecLookup = tabulateCharFunc (char2vec);
 
-module.exports = { charPermLookup, charLookup, charClassLookup, charVecLookup, vec2char, int2char };
+module.exports = { charPermLookup, charLookup, charClassLookup, charVecLookup, vec2char, int2char, dirs };

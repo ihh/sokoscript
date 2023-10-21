@@ -118,9 +118,10 @@ const compileTypes = (rules) => {
     const transform = index.types.map ((type) =>
         (index.transform[type] || []).map ((rule) =>
             rule.type === 'transform'
-            ? { ...rule, lhs: rule.lhs.map(compileType), rhs: rule.rhs.map(compileType) }
+            ? { rate: 1, ...rule, lhs: rule.lhs.map(compileType), rhs: rule.rhs.map(compileType) }
             : rule ));
-    return { transform, types: index.types }
+    const rateByType = transform.map ((rules) => rules.reduce ((total, rule) => total + rule.rate, 0));
+    return { transform, types: index.types, rateByType }
 }
 
 export { makeGrammarIndex, expandInherits, compileTypes }

@@ -118,7 +118,7 @@ class Matcher {
             const { type, state } = cell;
             const match = matchLhsTerm (term, type, state);
             if (match)
-                this.termCell.push (cell);
+                this.termCell.push ({...cell});  // make copy of cell, since we modify it by deleting meta in newCell
         } else
             this.failed = true;
         return this;
@@ -155,8 +155,3 @@ const applyTransformRule = (board, x, y, dir, rule) => {
         rule.rhs.forEach ((term, pos) => matcher.updateCell (pos, term));
     return !matcher.failed;
 }
-
-
-// TODO:
-// Random waiting time until next event & selection of next event
-// Ultimately these could be integer-robust for lightning-fast implementation, but that isn't important yet! Premature optimization!

@@ -1,6 +1,7 @@
 {
   "type": "module",
   "dependencies": {
+    "mersennetwister": "^0.2.3",
     "pegjs": "^0.10.0"
   },
   "devDependencies": {
