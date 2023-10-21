@@ -112,6 +112,8 @@ const addrExpr = (t) => {
         return '>' + t.dir.toUpperCase() + '>';
     case 'cell':
       return '>' + vecExpr(t.arg) + '>';
+    case 'neighbor':
+      return '>+' + vecExpr(t.arg) + '>';
     default:
       throw new Error ("Unrecognized op '" + t.op + "' in " + JSON.stringify(t));
       return undefined;

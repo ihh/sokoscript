@@ -1,20 +1,23 @@
 {
-  const validatePositionals = (expr, matchedStateChars, extraLoc) =>
-    (expr.hasOwnProperty('group')
-     ? ((expr.group <= matchedStateChars.length + (extraLoc && expr.op==='location' ? 1 : 0))
-        && (expr.hasOwnProperty('char') ? (expr.char <= matchedStateChars[expr.group-1]) : true))
-     : true)
-    && ['left','right','arg']
-        .filter((prop)=>expr.hasOwnProperty(prop))
-        .reduce ((result, prop) => result && validatePositionals (expr[prop], matchedStateChars), true);
+  const validatePositionals = (expr, matchedStateChars, extraLoc) => {
+    if (expr.group === 0)
+      expr.group = matchedStateChars.length;
+    return (expr.hasOwnProperty('group')
+        ? ((expr.group <= matchedStateChars.length + (extraLoc && expr.op==='location' ? 1 : 0))
+          && (expr.hasOwnProperty('char') ? (expr.char <= matchedStateChars[expr.group-1]) : true))
+        : true)
+      && ['left','right','arg']
+          .filter((prop)=>expr.hasOwnProperty(prop))
+          .reduce ((result, prop) => result && validatePositionals (expr[prop], matchedStateChars), true);
+  };
 
   const reducePred = (args, pred) => args.reduce ((result, arg) => result && pred(arg), true);
   const altList = (alt) => alt.op === 'alt' ? alt.alt : [alt];
   const reduceAlt = (alt, pred) => alt.op === 'negterm' ? reduceAlt (alt.term, pred) : reducePred (altList(alt), pred);
   const validateState = (term, msc, extraLoc) => !term.hasOwnProperty('state') || reducePred (term.state, (char) => validatePositionals(char,msc,extraLoc));
-  const validateDir = (term, msc) => !term.hasOwnProperty('dir') || validatePositionals(term.dir,msc,false);
+  const validateAddr = (term, msc) => !term.hasOwnProperty('addr') || validatePositionals(term.addr,msc,false);
   const matchedStateChars = (alt) => altList(alt).length && Math.min.apply (null, altList(alt).map (term => term.hasOwnProperty('state') ? term.state.filter((s)=>!(s.op==='any')).length : 0));
-  const validateLhs = (lhs) => lhs.reduce ((memo, term) => ({ result: memo.result && reduceAlt (term, (term) => validateState(term,memo.matchedStateChars,true) && validateDir(term,memo.matchedStateChars)),
+  const validateLhs = (lhs) => lhs.reduce ((memo, term) => ({ result: memo.result && reduceAlt (term, (term) => validateState(term,memo.matchedStateChars,true) && validateAddr(term,memo.matchedStateChars)),
                                                               matchedStateChars: memo.matchedStateChars.concat ([matchedStateChars(term)]) }),
                                                             { result: true, matchedStateChars: [] }).result;
   const validateRhs = (lhs, rhs) => rhs.reduce ((result, term) => result && reduceAlt (term, (term) => validateState(term,lhs.map(matchedStateChars),false)), true);
@@ -36,6 +39,8 @@
     }
     return reducePred (rule.parents, isValidAncestor);
   }
+
+  const minusVec = (arg) => ({ op: "-", left: { op: "vector", x: 0, y: 0 }, right: arg });
 }
 
 RuleSet
@@ -51,18 +56,18 @@ Rule
    _ ":" _ rhs:Rhs
  &{ return validateRhs(lhs,rhs) }
   _ "," _ attrs:Attributes
-  { return { type: 'transform', lhs, rhs, ...attrs } }
+  { return { type: "transform", lhs, rhs, ...attrs } }
  / lhs:Lhs
  &{ return validateLhs(lhs) }
    _ ":" _ rhs:Rhs
  &{ return validateRhs(lhs,rhs) }
-  { return { type: 'transform', lhs, rhs } }
+  { return { type: "transform", lhs, rhs } }
  / child:Prefix _ "=" _ parents:InheritRhs
-  { return { type: 'inherit', child, parents } }
+  { return { type: "inherit", child, parents } }
 
 Comment
  = "//" c:[^\n]+
-  { return { type: 'comment', comment: c.join('') } }
+  { return { type: "comment", comment: c.join('') } }
 
 Attributes
  = first:Attribute rest:(_ Attribute)*
@@ -103,7 +108,12 @@ RelDirChar
 
 NbrAddr
  = ">" arg:AdditiveVecExpr ">" { return { op: "cell", arg } }
-
+ / ">+" arg:AdditiveVecExpr ">" { return { op: "neighbor", arg } }
+ / ">-" arg:AdditiveVecExpr ">" { return { op: "neighbor", arg: minusVec(arg) } }
+ / ">" group:NonZeroInteger "#" char:NonZeroInteger ">" { return { op: "neighbor", arg: { op: "state", group, char } } }
+ / ">" char:NonZeroInteger ">" { return { op: "neighbor", arg: { op: "state", group: 0, char } } }
+ / ">-" group:NonZeroInteger "#" char:NonZeroInteger ">" { return { op: "neighbor", arg: minusVec ({ op: "state", group, char }) } }
+ / ">-" char:NonZeroInteger ">" { return { op: "neighbor", arg: minusVec ({ op: "state", group: 0, char }) } }
 
 AdditiveVecExpr
  = first:MultiplicativeVecExpr rest:(_ ("+" / "-") _ MultiplicativeVecExpr)+ {
@@ -124,7 +134,6 @@ MultiplicativeVecExpr
 MatrixExpr
   = "%" m:[dblrhvDBLRHV] { return { op: "matrix", matrix: m.toUpperCase() } }
 
-
 PrimaryVecExpr
   = "@" group:NonZeroInteger { return { op: "location", group } }
   / "@vec(" _ x:SignedInteger _ "," _ y:SignedInteger _ ")" { return { op: "vector", x: parseInt(x), y: parseInt(y) } }
@@ -135,6 +144,7 @@ PrimaryVecExpr
   / "@anti(" _ arg:AdditiveVecExpr _ ")" { return { op: "anti", arg } }
   / "@" dir:AbsDirChar { return { op: "absdir", dir: dir.toUpperCase() } }
   / "@" dir:RelDirChar { return { op: "reldir", dir: dir.toUpperCase() } }
+  / "$#" char:NonZeroInteger { return { op: "state", group: 0, char } }
   / "$" group:NonZeroInteger "#" char:NonZeroInteger { return { op: "state", group, char } }
   / "(" expr:AdditiveVecExpr ")" { return expr }
 

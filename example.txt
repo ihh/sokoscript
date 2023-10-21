@@ -28,6 +28,10 @@ a:d, rate=2 reward=3 command={x} .
 
 a >@n> b:c.
 
+a/? >1> b : c.
+
+u/? >1> v/?? >2> w : x.
+
 z/[@moore(@f)] : z/@f.
 
 player crate >l> * : $3 player crate, command={z} .

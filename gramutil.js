@@ -108,20 +108,28 @@ const expandInherits = (index) => {
 
 const compileTypes = (rules) => {
     const index = expandInherits (makeGrammarIndex (rules));
+    const { types, typeIndex } = index.types;
     const compileType = (t) => {
         if (t.op === 'negterm')
             return { ...t, term: compileType (t.term) };
         if (t.op === 'alt')
             return { ...t, alt: t.alt.map (compileType) };
-        return { ...t, type: index.typeIndex[t.type] }
+        return { ...t, type: typeIndex[t.type] }
     };
-    const transform = index.types.map ((type) =>
+    const transform = types.map ((type) =>
         (index.transform[type] || []).map ((rule) =>
             rule.type === 'transform'
             ? { rate: 1, ...rule, lhs: rule.lhs.map(compileType), rhs: rule.rhs.map(compileType) }
             : rule ));
+    let command = types.map(()=>({})), key = types.map(()=>({}));
+    types.forEach ((type) => transform[type].forEach ((rule) => {
+        if (rule.command)
+            command[type][rule.command] = (command[type][rule.command] || []).concat ([rule]);
+        if (rule.key)
+            key[type][rule.key] = (key[type][rule.key] || []).concat ([rule]);
+    }))
     const rateByType = transform.map ((rules) => rules.reduce ((total, rule) => total + rule.rate, 0));
-    return { transform, types: index.types, rateByType }
+    return { transform, types, typeIndex, rateByType, command, key }
 }
 
 export { makeGrammarIndex, expandInherits, compileTypes }

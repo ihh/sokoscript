@@ -1,4 +1,5 @@
 import { lookups } from './lookups';
+import { applyTransformRule } from './engine';
 
 // binarySearch returns a negative insertion point if the element is not found
 const binarySearch = (arr, el) => {
@@ -25,6 +26,7 @@ class Board {
         this.size = size;
         this.grammar = grammar;
         this.owner = owner;
+        this.time = 0;
         this.cell = new Array(size*size).fill(0).map((_)=>({type:'_',state:''}));
         this.byType = [new Array(size*size).fill(0).map((_,n)=>n)].concat (new Array(grammar.types.length-1).fill(0).map((_)=>[]));
         this.byID = {};
@@ -111,10 +113,36 @@ class Board {
         return { wait, x, y, rule, dir }
     }
 
+    processMessage (msg) {
+        if (msg.type === 'command') {
+            const { time, user, id, dir, command, key } = msg;
+            const index = this.byID[id];
+            if (typeof(index) !== 'undefined') {
+                const [x,y] = this.index2xy[index];
+                if (typeof(cell.owner) === 'undefined' || user === cell.owner || user === Board.owner) {
+                    const rules = command ? this.grammar.command[cell.type][command] : this.grammar.key[cell.type][key];
+                    rules.reduce ((rule) => success || applyTransformRule (this, x, y, dir, rule), false);
+                }
+            }
+        } else if (msg.type === 'write') {
+            const { time, user, cells } = msg;
+            cells.forEach ((cell) => {
+                const { x, y, oldType, oldState, type, state, meta } = cell;
+                const index = this.xy2index(x,y);
+                const cell = this.cell[index];
+                if (typeof(cell.owner) === 'undefined' || user === cell.owner || user === Board.owner)
+                    if (typeof(oldType) === 'undefined' || this.grammar.types[cell.type] === this.oldType)
+                        if (typeof(oldState === 'undefined' || cell.state === this.oldState))
+                            this.setCell (x, y, { type, state, meta });
+            })
+        } else
+            console.error ('Unknown message type');
+    }
+
     // TODO
     // Implement "process message". A message can be
-    //   { msg: 'command', time, user, command, id }                       ... user must match board.owner or cell.meta.owner
-    //   { msg: 'write', time, user, cells: [{x, y, type, state, meta}] }  ... user must match board.owner or cell.meta.owner
+    //   { type: 'command', time, user, command, id }                       ... user must match board.owner or cell.meta.owner
+    //   { type: 'write', time, user, cells: [{x, y, type, state, meta}] }  ... user must match board.owner or cell.meta.owner
     // Implement "evolve board for max time t"
     // Implement "evolve board for max time t while processing the following set of messages"
     // Implement serialize/deserialize board

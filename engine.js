@@ -1,9 +1,5 @@
 import { lookups } from './lookups';
 
-const escapeRegex = (string) => {
-    return string.replace(/[/\-\\^$*+?.()|[\]{}]/g, '\\$&');
-}
-
 class Matcher {
     constructor (board, x, y, dir) {
         this.board = board;
@@ -29,27 +25,33 @@ class Matcher {
         if (t.type !== type)
             return false;
 
-        const reStr = '^' + (term.state ? term.state.map(this.stateCharToRegex.bind(this)).join('') : '.*') + '$';
-        const re = new RegExp (reStr);
-        return re.test (state);
+        for (let n = 0; n < t.state.length; ++n) {
+          const matchStatus = this.matchStateChar (t.state[n], state.charAt(n));
+          if (!matchStatus)
+            return false;
+          if (matchStatus < 0)
+            return true;
+        }
+        return t.state.length === state.length;
     }
 
-    stateCharToRegex (t) {
-      if (typeof(t) === 'string')
-        return escapeRegex(t);
-      switch (t.op) {
+    // return true to match char, -1 to match all remaining state chars
+    matchStateChar (s, c) {
+      if (typeof(s) === 'string')
+        return s === c;
+      switch (s.op) {
       case 'char':
-        return escapeRegex(t.char);
+        return s.char === c;
       case 'wild':
-        return '.';
+        return typeof(c) !== 'undefined';
       case 'any':
-        return '.*';
+        return -1;  // match all remaining state chars
       case 'class':
-        return '[' + escapeRegex(t.chars.map(this.computeStateChar.bind(this)).join('')) + ']';
+        return s.chars.indexOf(c) >= 0;
       case 'negated':
-        return '[^' + escapeRegex(t.chars.map(this.computeStateChar.bind(this)).join('')) + ']';
+        return s.chars.indexOf(c) < 0;
       default:
-        return escapeRegex (this.computeStateChar (t));
+        return this.computeStateChar (s) === c;
       }
     }
 
@@ -99,6 +101,8 @@ class Matcher {
             return lookups.charVecLookup[lookups.vecAdd[lookups.absDir[t.dir]][lookups.vec2char(baseVec)]];
         case 'relative':
             return lookups.charVecLookup[lookups.vecAdd[this.getRelativeDir(t.dir)][lookups.vec2char(baseVec)]];
+        case 'neighbor':
+            return lookups.charVecLookup[lookups.vecAdd[this.computeStateChar(t.arg)][lookups.vec2char(baseVec)]];
         case 'cell':
             return lookups.charVecLookup[this.computeStateChar(t.arg)];
         default:
@@ -112,13 +116,13 @@ class Matcher {
             if (pos === 0)
                 x = y = 0;
             else
-                [x,y] = this.computeAddr (term.dir || { op: 'relative', dir: 'F' }, this.termAddr[pos-1]);
+                [x,y] = this.computeAddr (term.dir || { op: 'relative', dir: 'F' }, this.termAddr[pos-1], pos);
             this.termAddr.push ([x,y]);
             const cell = board.getCell (x + this.x, y + this.y);
             const { type, state } = cell;
             const match = matchLhsTerm (term, type, state);
             if (match)
-                this.termCell.push ({...cell});  // make copy of cell, since we modify it by deleting meta in newCell
+                this.termCell.push (cell);
         } else
             this.failed = true;
         return this;
@@ -126,15 +130,13 @@ class Matcher {
 
     newCell (t) {
         if (t.op === 'group') {
-            const cell = this.termCell[t.group-1];
-            const { type, state, meta } = cell;
-            delete cell.meta;  // at most one cell can inherit metadata
+            const { type, state, meta } = this.termCell[t.group-1];
+            this.termCell[t.group-1] = { type, state };  // at most one cell can inherit metadata
             return { type, state, meta }
         }
         if (t.op === 'prefix') {
-            const cell = this.termCell[t.group-1];
-            const { type, meta } = cell;
-            delete cell.meta;  // at most one cell can inherit metadata
+            const { type, state, meta } = this.termCell[t.group-1];
+            this.termCell[t.group-1] = { type, state };  // at most one cell can inherit metadata
             return { type,
                      state: t.state.map(this.computeStateChar.bind(this)).join(''),
                      meta }
@@ -155,3 +157,5 @@ const applyTransformRule = (board, x, y, dir, rule) => {
         rule.rhs.forEach ((term, pos) => matcher.updateCell (pos, term));
     return !matcher.failed;
 }
+
+export { applyTransformRule };

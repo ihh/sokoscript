@@ -121,4 +121,4 @@ const charClassLookup = tabulateOperators (Object.keys(neighborhood), (nh) => ta
 // precompute char->vector mapping
 const charVecLookup = tabulateCharFunc (char2vec);
 
-module.exports = { charPermLookup, charLookup, charClassLookup, charVecLookup, vec2char, int2char, dirs };
+export { charPermLookup, charLookup, charClassLookup, charVecLookup, vec2char, int2char, dirs };
