@@ -1,23 +1,46 @@
 import { lookups } from './lookups';
 import { applyTransformRule } from './engine';
 
-// binarySearch returns a negative insertion point if the element is not found
-const binarySearch = (arr, el) => {
-    let m = 0;
-    let n = arr.length - 1;
-    while (m <= n) {
-        let k = (n + m) >> 1;
-        let ak = arr[k];
-        if (el > ak) {
-            m = k + 1;
-        } else if (el < ak) {
-            n = k - 1;
-        } else {
-            return k;
-        }
+// Time-efficient data structure for storing a set of ints in the range [0,n) where n is a power of 2
+// Uses 2n memory.
+// Counting total number of elements is an O(1) operation
+// Add, remove, get K'th element are all O(log n) operations
+class RangeCounter {
+    constructor (n, full) {
+        this.n = n;
+        this.log2n = Math.log(n) / Math.log(2);
+        if ((this.log2n) % 1 !== 0)
+            throw new Error ("Length is not a power of 2: " + n)
+        // levelCount[k][m] is the cardinality of {i: i % (1<<k) = m} where i is an integer in the current set
+        this.levelCount = new Array(this.log2n + 1).fill(0).map ((_,level) => new Array (1 << (this.log2n - level)).fill(full ? (1 << level) : 0));
     }
-    return ~m;
-};
+
+    add (val) {
+        for (let level = this.log2n; level >= 0; --level)
+            ++this.levelCount[level][val >> level];
+    }
+
+    remove (val) {
+        for (let level = this.log2n; level >= 0; --level)
+            --this.levelCount[level][val >> level];
+    }
+
+    total() {
+        return this.levelCount[this.log2n];
+    }
+
+    kthElement (k) {
+        let index = 0;
+        for (let level = this.log2n - 1; level >= 0; --level) {
+            index = index << 1;
+            if (k > this.levelCount[index]) {
+                k -= this.levelCount[index];
+                ++index;
+            }
+        }
+        return index;
+    }
+}
 
 const sum = (weights) => weights.reduce ((s, w) => s + w, 0);
 
@@ -27,8 +50,8 @@ class Board {
         this.grammar = grammar;
         this.owner = owner;
         this.time = 0;
-        this.cell = new Array(size*size).fill(0).map((_)=>({type:'_',state:''}));
-        this.byType = [new Array(size*size).fill(0).map((_,n)=>n)].concat (new Array(grammar.types.length-1).fill(0).map((_)=>[]));
+        this.cell = new Array(size*size).fill(0).map((_)=>({type:0,state:''}));
+        this.byType = new Array(grammar.types.length).fill(0).map((_,n)=>new RangeCounter(size*size,n===0));
         this.byID = {};
     }
 
@@ -45,13 +68,16 @@ class Board {
     }
 
     setCell (x, y, newValue) {
-        const index = xy2index (x, y);
-        const oldValue = this.cell[index];
+        this.setCellByIndex (xy2index (x, y));
+    }
+
+    setCellByIndex (index, newValue) {
+            const oldValue = this.cell[index];
         if (newValue.type !== oldValue.type) {
             let oldByType = this.byType[oldValue.type];
             let newByType = this.byType[newValue.type];
-            oldByType.splice (binarySearch(oldByType,index), 1);
-            newByType.splice (~binarySearch(newByType,index), 0, index);
+            oldByType.remove (index);
+            newByType.add (index);
         }
         if (oldValue.meta && oldValue.meta.id && this.byID[oldValue.meta.id] === index && (!newValue.meta || newValue.meta.id !== oldValue.meta.id))
             delete this.byID[oldValue.meta.id];
@@ -72,7 +98,7 @@ class Board {
     }
 
     totalTypeRates() {
-        return this.byType.map ((cells, type) => cells.length * this.grammar.rateByType[type]);
+        return this.byType.map ((counter, type) => counter.total() * this.grammar.rateByType[type]);
     }
 
     totalRate() {
@@ -109,7 +135,7 @@ class Board {
         --ruleIndex;
         r = (r / w) + 1;
         const dir = Math.floor (r*4);
-        const [x,y] = this.index2xy (this.byType[type][n]);
+        const [x,y] = this.index2xy (this.byType[type].kthElement(n));
         return { wait, x, y, rule, dir }
     }
 
@@ -139,13 +165,37 @@ class Board {
             console.error ('Unknown message type');
     }
 
+    evolveToTime (t, rng) {
+        while (true) {
+            const { wait, x, y, rule, dir } = this.nextRule (rng.random(), rng.random());
+            if (this.time + wait >= t) {
+                this.time = t;
+                break;
+            }
+            applyTransformRule (this, x, y, lookups.dirs[Math.floor (rng.random() * 4)], rule);
+            this.time += wait;
+        }
+    }
+
+    evolveAndProcess (t, messages, rng) {
+        messages.toSorted ((a,b) => a.time - b.time).forEach ((message) => {
+            this.evolveToTime (message.time, rng);
+            this.processMessage (message);
+        })
+        this.evolveToTime (t, rng);
+    }
+
+    toString() {
+        return JSON.stringify ({ time: this.time, cell: this.cell })
+    }
+
+    initFromString (str) {
+        const json = JSON.parse (str);
+        this.time = json.time;
+        json.cell.forEach ((cell, index) => this.setCellByIndex (index, cell));
+    }
+
     // TODO
-    // Implement "process message". A message can be
-    //   { type: 'command', time, user, command, id }                       ... user must match board.owner or cell.meta.owner
-    //   { type: 'write', time, user, cells: [{x, y, type, state, meta}] }  ... user must match board.owner or cell.meta.owner
-    // Implement "evolve board for max time t"
-    // Implement "evolve board for max time t while processing the following set of messages"
-    // Implement serialize/deserialize board
     // Implement canonical hashes of board, rules, and messages
     // Implement "create verifiable update" (hashes of board, rule, messages, and time lapsed, plus new board state) and "verify update"
 
