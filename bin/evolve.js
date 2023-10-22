@@ -25,13 +25,11 @@ const text = fs.readFileSync(opt.options.grammar).toString();
 const rules = parseOrUndefined (text, (err) => { console.error(err); process.exit() });
 const grammar = compileTypes (rules || []);
 
-const board = new Board (parseInt(opt.options.size), grammar, opt.options.owner || 'owner');
+const board = new Board (parseInt(opt.options.size), grammar, opt.options.owner || 'owner', new MersenneTwister (parseInt (opt.options.rnd || defaultSeed)));
 if (opt.options.board)
     board.initFromString (fs.readFileSync(opt.options.board).toString());
 
-if (opt.options.time) {
-    let rng = new MersenneTwister (parseInt (opt.options.rnd || defaultSeed));
-    board.evolveToTime (opt.options.time, rng);
-}
+if (opt.options.time)
+    board.evolveToTime (opt.options.time);
 
 console.log (board.toString());

@@ -59,10 +59,11 @@ const knuthShuffle = (list, rng) => {
 const sum = (weights) => weights.reduce ((s, w) => s + w, 0);
 
 class Board {
-    constructor (size, grammar, owner) {
+    constructor (size, grammar, owner, rng) {
         this.size = size;
         this.grammar = grammar;
         this.owner = owner;
+        this.rng = rng;
         this.time = 0;
         this.cell = new Array(size*size).fill(0).map((_)=>({type:0,state:''}));
         this.byType = new Array(grammar.types.length).fill(0).map((_,n)=>new RangeCounter(size*size,n===0));
@@ -122,13 +123,16 @@ class Board {
 
     // Random waiting time until next event, and selection of next event
     // Ultimately this could all be integerized for lightning-fast implementation, but that isn't important yet! Premature optimization!
-    // r1 and r2 are random variables uniformly distributed on [0,1)
-    nextRule (r1, r2) {
+    nextRule (maxWait) {
         const typeRates = this.totalTypeRates();
         const totalRate = sum (typeRates);
         if (totalRate === 0)
             return null;
+        const r1 = this.rng.random();
         const wait = -Math.log(r1 > 0 ? r1 : Number.MIN_VALUE) / totalRate;
+        if (wait > maxWait)
+            return null;
+        const r2 = this.rng.random();
         let r = r2 * totalRate;
         let type = 0, w;
         while (r >= 0) {
@@ -183,30 +187,30 @@ class Board {
             console.error ('Unknown message type');
     }
 
-    randomDir (rng) {
-        return lookups.dirs[Math.floor (rng.random() * 4)];
+    randomDir() {
+        return lookups.dirs[Math.floor (this.rng.random() * 4)];
     }
 
-    evolveAsyncToTime (t, rng) {
+    evolveAsyncToTime (t) {
         while (true) {
-            const r = this.nextRule (rng.random(), rng.random());
-            if (!r || this.time + r.wait >= t) {
+            const r = this.nextRule (t - this.time);
+            if (!r) {
                 this.time = t;
                 break;
             }
             const { x, y, rule, dir } = r;
-            applyTransformRule (this, x, y, this.randomDir(rng), rule);
+            applyTransformRule (this, x, y, this.randomDir(), rule);
             this.time += wait;
         }
     }
 
-    evolveToTime (t, rng) {
+    evolveToTime (t) {
         const syncPeriods = this.grammar.syncRates.map ((r) => 1 / r);
         const syncCategories = syncPeriods.map((_p,n)=>n).reverse();
         while (this.time < t) {
             const nextSyncTimes = syncPeriods.map ((p) => this.time + p - (this.time % p));
             const nextTime = Math.min (t, ...nextSyncTimes);
-            this.evolveAsyncToTime (nextTime, rng);
+            this.evolveAsyncToTime (nextTime);
             const nextSyncCategories = syncCategories.filter ((n) => nextSyncTimes[n] === nextTime);
             const updates = knuthShuffle (nextSyncCategories.reduce ((l, nSync) =>
                 l.concat (this.grammar.typesBySyncRate[nSync].reduce ((l, nType) => {
@@ -215,27 +219,31 @@ class Board {
                         const xy = this.index2xy(index);
                         return l.concat (rules.map ((rule) => [xy,rule]));
                     }, []));
-                }, [])), []), rng).reduce ((updates, xy_rule) =>
-                    updates.concat (transformRuleUpdate(this,xy_rule[0][0],xy_rule[0][1],this.randomDir(rng),xy_rule[1])), []);
+                }, [])), []), this.rng).reduce ((updates, xy_rule) =>
+                    updates.concat (transformRuleUpdate(this,xy_rule[0][0],xy_rule[0][1],this.randomDir(),xy_rule[1])), []);
             updates.forEach ((update) => this.setCell (...update));
        }
     }
 
-    evolveAndProcess (t, messages, rng) {
+    evolveAndProcess (t, messages) {
         messages.toSorted ((a,b) => a.time - b.time).forEach ((message) => {
-            this.evolveToTime (message.time, rng);
+            this.evolveToTime (message.time);
             this.processMessage (message);
         })
-        this.evolveToTime (t, rng);
+        this.evolveToTime (t);
     }
 
     toString() {
-        return JSON.stringify ({ time: this.time, types: this.grammar.types, cell: this.cell.map ((cell) => [cell.type].concat(cell.state || cell.meta ? [cell.state || ''].concat(cell.meta ? [cell.meta] : []) : [])) })
+        return JSON.stringify ({ time: this.time,
+                                 mt: this.rng.mt,
+                                 types: this.grammar.types,
+                                 cell: this.cell.map ((cell) => [cell.type].concat(cell.state || cell.meta ? [cell.state || ''].concat(cell.meta ? [cell.meta] : []) : [])) })
     }
 
     initFromString (str) {
         const json = JSON.parse (str);
         this.time = json.time;
+        this.rng.mt = json.mt;
         if (json.cell.length !== this.cell.length)
             throw new Error ("Tried to load "+json.cell.size()+"-cell board file into "+this.cell.size()+"-cell board");
         const unknownTypes = json.types.filter ((type) => !(type in this.grammar.typeIndex));
