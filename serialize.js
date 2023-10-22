@@ -141,6 +141,7 @@ const makeRhs = (rhs, sep) => {
 const serialize = (rules) => {
   const attrs = (rule) =>
     (rule.rate ? (' rate={' + rule.rate + '}') : '')
+    + (rule.sync ? (' sync={' + rule.sync + '}') : '')
     + (rule.command ? (' command={' + escapeAttr(rule.command) + '}') : '')
     + (rule.key ? (' key={' + escapeAttr(rule.key) + '}') : '')
     + (rule.reward ? (' reward={' + rule.reward + '}') : '')

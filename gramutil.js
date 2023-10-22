@@ -2,7 +2,7 @@ import { parse, SyntaxError } from './grammar.js';
 import { lhsTerm } from './serialize.js';
 
 const makeGrammarIndex = (rules) => {
-    let transform = {}, parents = {}, types = ['_'], seenType = {'_':true};
+    let transform = {}, syncTransform = {}, parents = {}, types = ['_'], seenType = {'_':true};
     const markTerm = (term) => {
         if (term.op === 'negterm')
             markTerm (term.term);
@@ -23,11 +23,14 @@ const makeGrammarIndex = (rules) => {
         let prefix;
         switch (rule.type) {
             case 'transform':
-                prefix = rule.lhs[0].type;
-                transform[prefix] = transform[prefix] || [];
-                transform[prefix].push (rule);
-                rule.lhs.forEach (markTerm);
-                rule.rhs.forEach (markTerm);
+                {
+                    prefix = rule.lhs[0].type;
+                    let trans = rule.sync ? (syncTransform[rule.sync] = syncTransform[rule.sync] || {}) : transform;
+                    trans[prefix] = trans[prefix] || [];
+                    trans[prefix].push (rule);
+                    rule.lhs.forEach (markTerm);
+                    rule.rhs.forEach (markTerm);
+                }
                 break;
             case 'inherit':
                 prefix = rule.child;
@@ -62,13 +65,8 @@ const makeGrammarIndex = (rules) => {
     Object.keys(isAncestor).forEach ((ancestor) => descendants[ancestor] = Object.keys(isAncestor[ancestor]).sort())
     let typeIndex = {};
     types.forEach ((type, n) => typeIndex[type] = n);
-    return { transform, ancestors, descendants, types, typeIndex };
-}
-
-const replaceSubjectType = (rule, type) => {
-    let lhs = rule.lhs.slice(0);
-    lhs[0] = { ...lhs[0], type }
-    return { ...rule, lhs }
+    let syncRates = Object.keys(syncTransform).sort ((a,b) => a - b);
+    return { transform, syncTransform, ancestors, descendants, types, typeIndex, syncRates };
 }
 
 const replaceTermWithAlt = (term, descendants) => {
@@ -91,46 +89,69 @@ const replaceTermWithAlt = (term, descendants) => {
     return term;
 }
 
-const expandInherits = (index) => {
-    const explicit  = Object.assign (...[{}].concat (Object.keys(index.transform).map ((prefix) => ({
-        [prefix]: index.transform[prefix].map ((rule) => ({
-            ...rule,
-            lhs: [rule.lhs[0]].concat (rule.lhs.slice(1).map ((term) => replaceTermWithAlt (term, index.descendants)))
-        }))
-    }))));
-    const inherited = Object.assign (...[{}].concat (Object.keys(index.ancestors).map ((prefix) => ({
-        [prefix]: index.ancestors[prefix].reduce ((rules,ancs) =>
-            rules.concat((explicit[ancs] || []).map ((rule) =>
-                replaceSubjectType(rule,prefix))), explicit[prefix] || [])
-    }))));
+const expandAlts = (transform, descendants) => Object.assign (...[{}].concat (Object.keys(transform).map ((prefix) => ({
+    [prefix]: transform[prefix].map ((rule) => ({
+        ...rule,
+        lhs: [rule.lhs[0]].concat (rule.lhs.slice(1).map ((term) => replaceTermWithAlt (term, descendants)))
+    }))
+}))));
 
-    return { types: index.types, typeIndex: index.typeIndex, transform: {...explicit, ...inherited} };
+const replaceSubjectType = (rule, type) => {
+    let lhs = rule.lhs.slice(0);
+    lhs[0] = { ...lhs[0], type }
+    return { ...rule, lhs }
+}
+
+const appendInherited = (types, explicit, ancestors) => Object.assign (...[{}].concat (types.map ((prefix) => ({
+    [prefix]: (ancestors[prefix] || []).reduce ((rules,ancs) =>
+        rules.concat((explicit[ancs] || []).map ((rule) =>
+            replaceSubjectType(rule,prefix))), explicit[prefix] || []) })).filter ((trans) => trans[Object.keys(trans)[0]].length)));
+
+const expandInherits = (index) => {
+    const explicit = expandAlts (index.transform, index.descendants);
+    const syncExplicit = Object.assign (...[{}].concat(index.syncRates.map ((r) => ({ [r]: expandAlts (index.syncTransform[r], index.descendants) }))));
+    const transform = appendInherited (index.types, explicit, index.ancestors);
+    const syncTransform = Object.assign (...[{}].concat(index.syncRates.map ((r) => ({ [r]: appendInherited (index.types, syncExplicit[r], index.ancestors) }))));
+
+    return { types: index.types, typeIndex: index.typeIndex, syncRates: index.syncRates, transform, syncTransform };
 };
+
+const compileTerm = (typeIndex, t) => {
+    if (t.op === 'negterm')
+        return { ...t, term: compileTerm (typeIndex, t.term) };
+    if (t.op === 'alt')
+        return { ...t, alt: t.alt.map ((t) => compileTerm (typeIndex, t)) };
+    return { ...t, type: typeIndex[t.type] }
+};
+
+const compileTransform = (types, transform, typeIndex, rateKey) =>
+ types.map ((type) =>
+    (transform[type] || []).map ((rule) =>
+        rule.type === 'transform'
+        ? { [rateKey]: 1,
+            ...rule,
+            lhs: rule.lhs.map((t) => compileTerm(typeIndex,t)),
+            rhs: rule.rhs.map((t) => compileTerm(typeIndex,t)) }
+        : rule ));
+
+const collectCommandsAndKeys = (command, key, transform, types) =>
+ types.forEach ((_name, type) => transform[type].forEach ((rule) => {
+    if (rule.command)
+        command[type][rule.command] = (command[type][rule.command] || []).concat ([rule]);
+    if (rule.key)
+        key[type][rule.key] = (key[type][rule.key] || []).concat ([rule]);
+ }));
 
 const compileTypes = (rules) => {
     const index = expandInherits (makeGrammarIndex (rules));
-    const { types, typeIndex } = index;
-    const compileType = (t) => {
-        if (t.op === 'negterm')
-            return { ...t, term: compileType (t.term) };
-        if (t.op === 'alt')
-            return { ...t, alt: t.alt.map (compileType) };
-        return { ...t, type: typeIndex[t.type] }
-    };
-    const transform = types.map ((type) =>
-        (index.transform[type] || []).map ((rule) =>
-            rule.type === 'transform'
-            ? { rate: 1, ...rule, lhs: rule.lhs.map(compileType), rhs: rule.rhs.map(compileType) }
-            : rule ));
+    const { types, typeIndex, syncRates } = index;
+    const transform = compileTransform (types, index.transform, typeIndex, 'rate');
+    const syncTransform = Object.assign (...[{}].concat(index.syncRates.map ((r) => ({ [r]: compileTransform (index.types, index.syncTransform[r], typeIndex, 'sync') }))));
     let command = types.map(()=>({})), key = types.map(()=>({}));
-    types.forEach ((_name, type) => transform[type].forEach ((rule) => {
-        if (rule.command)
-            command[type][rule.command] = (command[type][rule.command] || []).concat ([rule]);
-        if (rule.key)
-            key[type][rule.key] = (key[type][rule.key] || []).concat ([rule]);
-    }))
+    collectCommandsAndKeys (command, key, transform, types);
+    syncRates.forEach ((r) => collectCommandsAndKeys (command, key, syncTransform[r], types));
     const rateByType = transform.map ((rules) => rules.reduce ((total, rule) => total + rule.rate, 0));
-    return { transform, types, typeIndex, rateByType, command, key }
+    return { transform, syncTransform, types, typeIndex, syncRates, rateByType, command, key }
 }
 
 const syntaxErrorMessage = (e, text) => {
@@ -158,4 +179,7 @@ const parseOrUndefined = (text, error) => {
     return rules;
 }
 
-export { makeGrammarIndex, expandInherits, compileTypes, syntaxErrorMessage, parseOrUndefined }
+const grammarIndexToRuleList = (index) => index.types.reduce ((newRules,type,n) => newRules.concat([{type:'comment',comment:' Type '+n+': '+type+' ('+(index.transform[type]||[]).length+' rules)'}]).concat(index.transform[type]||[]).concat(index.syncRates.reduce((l,s)=>l.concat(index.syncTransform[s][type]||[]),[])), []);
+const compiledGrammarIndexToRuleList = (index) => index.types.reduce ((newRules,type,n) => newRules.concat([{type:'comment',comment:' Type '+n+': '+type+' ('+(index.transform[n]||[]).length+' rules)'}]).concat(index.transform[n]||[]).concat(index.syncRates.reduce((l,s)=>l.concat(index.syncTransform[s][n]||[]),[])), []);
+
+export { makeGrammarIndex, expandInherits, compileTypes, syntaxErrorMessage, parseOrUndefined, grammarIndexToRuleList, compiledGrammarIndexToRuleList }

@@ -40,6 +40,20 @@
     return reducePred (rule.parents, isValidAncestor);
   }
 
+ const countDuplicateAttributes = (attrs) => {
+    let count = {};
+    attrs.forEach ((attr) => Object.keys(attr).forEach((k) => count[k] = (count[k] || 0) + 1));
+    const duplicates = Object.keys(count).filter((k) => count[k] > 1);
+    if (duplicates.length)
+      console.warn ("Warning - duplicate attributes: " + duplicates.map((d)=>'"'+d+'"').join(", "));
+    return duplicates.length;
+  }
+
+  const validateAttributes = (attrs) => {
+    const a = Object.assign (...attrs);
+    return !(a.sync && a.rate);
+  }
+
   const minusVec = (arg) => ({ op: "-", left: { op: "vector", x: 0, y: 0 }, right: arg });
 }
 
@@ -55,7 +69,7 @@ Rule
  &{ return validateLhs(lhs) }
    _ ":" _ rhs:Rhs
  &{ return validateRhs(lhs,rhs) }
-  _ "," _ attrs:Attributes
+  _ "," _ attrs:ValidAttributes
   { return { type: "transform", lhs, rhs, ...attrs } }
  / lhs:Lhs
  &{ return validateLhs(lhs) }
@@ -69,24 +83,22 @@ Comment
  = "//" c:[^\n]+
   { return { type: "comment", comment: c.join('') } }
 
+ValidAttributes
+ = a:Attributes
+ !{ return countDuplicateAttributes(a) }
+ &{ return validateAttributes(a) }
+  { return Object.assign(...a) }
+
 Attributes
  = first:Attribute rest:(_ Attribute)*
- !{
-    let count = {};
-    [[null,first]].concat(rest).forEach ((attr) => Object.keys(attr[1]).forEach((k) => count[k] = (count[k] || 0) + 1));
-    const duplicates = Object.keys(count).filter((k) => count[k] > 1);
-    if (duplicates.length)
-      console.warn ("Warning - duplicate attributes: " + duplicates.map((d)=>'"'+d+'"').join(", "));
-    return duplicates.length;
-  }
-  { return [[null,first]].concat(rest).reduce((a, attr) => { return { ...a, ...attr[1] } }, {}) }
+  { return [first].concat(rest.map ((a) => a[1])) }
 
 
 InheritRhs
  = first:Prefix rest:(_ "," _ Prefix)+ { return [first].concat (rest.map ((r) => r[3])) }
  / p:Prefix { return [p] }
 
-Attribute = Rate / Command / Key / Reward / Sound / Caption
+Attribute = Rate / Sync / Command / Key / Reward / Sound / Caption
 
 Lhs
  = t:Subject _ addr:DirOrNbrAddr _ u:LhsTerm s:LhsNbrSeq { return [t, { addr, ...u }].concat(s) }
@@ -241,6 +253,10 @@ StateChar = [0-9A-Za-z_]
 Rate
  = "rate={" _ r:Float _ "}" { return { rate: parseFloat(r) } }
  / "rate=" r:Float { return { rate: parseFloat(r) } }
+
+Sync
+ = "sync={" _ r:Float _ "}" { return { sync: parseFloat(r) } }
+ / "sync=" r:Float { return { sync: parseFloat(r) } }
 
 Command
  = "command={" command:EscapedString "}" { return { command } }
