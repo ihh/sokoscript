@@ -1,5 +1,5 @@
 import * as lookups from './lookups.js';
-import { applyTransformRule } from './engine.js';
+import { applyTransformRule, transformRuleUpdate } from './engine.js';
 
 // Time-efficient data structure for storing a set of ints in the range [0,n) where n is a power of 2
 // Uses 2n memory.
@@ -41,6 +41,19 @@ class RangeCounter {
         }
         return index;
     }
+
+    elements() {
+        return Array.from({length:this.total()},(_,k)=>this.kthElement(k));
+    }
+}
+
+const knuthShuffle = (list, rng) => {
+    const len = list.length;
+    for (let k = 0; k < len - 1; ++k) {
+        const i = k + Math.floor (rng.random() * (len - k));
+        [list[i], list[k]] = [list[k], list[i]];
+    }
+    return list;
 }
 
 const sum = (weights) => weights.reduce ((s, w) => s + w, 0);
@@ -113,6 +126,8 @@ class Board {
     nextRule (r1, r2) {
         const typeRates = this.totalTypeRates();
         const totalRate = sum (typeRates);
+        if (totalRate === 0)
+            return null;
         const wait = -Math.log(r1 > 0 ? r1 : Number.MIN_VALUE) / totalRate;
         let r = r2 * totalRate;
         let type = 0, w;
@@ -168,16 +183,42 @@ class Board {
             console.error ('Unknown message type');
     }
 
-    evolveToTime (t, rng) {
+    randomDir (rng) {
+        return lookups.dirs[Math.floor (rng.random() * 4)];
+    }
+
+    evolveAsyncToTime (t, rng) {
         while (true) {
-            const { wait, x, y, rule, dir } = this.nextRule (rng.random(), rng.random());
-            if (this.time + wait >= t) {
+            const r = this.nextRule (rng.random(), rng.random());
+            if (!r || this.time + r.wait >= t) {
                 this.time = t;
                 break;
             }
-            applyTransformRule (this, x, y, lookups.dirs[Math.floor (rng.random() * 4)], rule);
+            const { x, y, rule, dir } = r;
+            applyTransformRule (this, x, y, this.randomDir(rng), rule);
             this.time += wait;
         }
+    }
+
+    evolveToTime (t, rng) {
+        const syncPeriods = this.grammar.syncRates.map ((r) => 1 / r);
+        const syncCategories = syncPeriods.map((_p,n)=>n).reverse();
+        while (this.time < t) {
+            const nextSyncTimes = syncPeriods.map ((p) => this.time + p - (this.time % p));
+            const nextTime = Math.min (t, ...nextSyncTimes);
+            this.evolveAsyncToTime (nextTime, rng);
+            const nextSyncCategories = syncCategories.filter ((n) => nextSyncTimes[n] === nextTime);
+            const updates = knuthShuffle (nextSyncCategories.reduce ((l, nSync) =>
+                l.concat (this.grammar.typesBySyncRate[nSync].reduce ((l, nType) => {
+                    const rules = this.grammar.syncTransform[nSync][nType];
+                    return l.concat (this.byType[nType].elements().reduce ((l, index) => {
+                        const xy = this.index2xy(index);
+                        return l.concat (rules.map ((rule) => [xy,rule]));
+                    }, []));
+                }, [])), []), rng).reduce ((updates, xy_rule) =>
+                    updates.concat (transformRuleUpdate(this,xy_rule[0][0],xy_rule[0][1],this.randomDir(rng),xy_rule[1])), []);
+            updates.forEach ((update) => this.setCell (...update));
+       }
     }
 
     evolveAndProcess (t, messages, rng) {

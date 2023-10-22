@@ -12,10 +12,6 @@ class Matcher {
     }
 
     getCell (x, y) { return board.getCell (x + this.x, y + this.y); }
-    setCell (pos, val) {
-        const [x,y] = this.termAddr[pos];
-        return this.board.setCell (x + this.x, y + this.y, val);
-    }
 
     matchLhsTerm (t, type, state) {
         if (t.op === 'negterm')
@@ -147,17 +143,22 @@ class Matcher {
         return { type: t.type, state }
     }
     
-    updateCell (pos, term) {
-        const newCell = this.newCell (term);
-        this.setCell (pos, newCell);
+    newCellUpdate (term,pos) {
+      const a = this.termAddr[pos];
+      return [a[0] + this.x, a[1] + this.y, this.newCell(term)];
     }
 };
 
 const applyTransformRule = (board, x, y, dir, rule) => {
-    const matcher = rule.lhs.reduce ((matcher, term, pos) => matcher.matchLhsCell(term,pos), new Matcher (board, x, y, dir) );
-    if (!matcher.failed)
-        rule.rhs.forEach ((term, pos) => matcher.updateCell (pos, term));
-    return !matcher.failed;
+  const updates = transformRuleUpdate (board, x, y, dir, rule);
+  if (updates !== null)
+    updates.forEach ((update) => board.setCell (...update))
+  return !!updates;
 }
 
-export { applyTransformRule };
+const transformRuleUpdate = (board, x, y, dir, rule) => {
+  const matcher = rule.lhs.reduce ((matcher, term, pos) => matcher.matchLhsCell(term,pos), new Matcher (board, x, y, dir) );
+  return matcher.failed ? null : rule.rhs.map ((term, pos) => matcher.newCellUpdate(term,pos));
+}
+
+export { applyTransformRule, transformRuleUpdate };

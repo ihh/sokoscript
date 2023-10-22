@@ -153,7 +153,8 @@ const compileTypes = (rules) => {
     syncRates.forEach ((r, n) => collectCommandsAndKeys (command, key, syncTransform[n], types));
     const rateByType = transform.map ((rules) => rules.reduce ((total, rule) => total + rule.rate, 0));
     const syncRatesByType = types.map ((_t, n) => syncRates.reduce ((l, _r, m) => l.concat (syncTransform[m][n].length ? [m] : []), []));
-    return { transform, syncTransform, types, typeIndex, syncRates, rateByType, syncRatesByType, command, key }
+    const typesBySyncRate = syncRates.map ((_r, m) => types.reduce ((l, _t, n) => l.concat (syncTransform[m][n].length ? [n] : []), []));
+    return { transform, syncTransform, types, typeIndex, syncRates, rateByType, syncRatesByType, typesBySyncRate, command, key }
 }
 
 const syntaxErrorMessage = (e, text) => {
