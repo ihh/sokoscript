@@ -65,8 +65,9 @@ const makeGrammarIndex = (rules) => {
     Object.keys(isAncestor).forEach ((ancestor) => descendants[ancestor] = Object.keys(isAncestor[ancestor]).sort())
     let typeIndex = {};
     types.forEach ((type, n) => typeIndex[type] = n);
-    let syncRates = Object.keys(syncTransform).sort ((a,b) => a - b);
-    return { transform, syncTransform, ancestors, descendants, types, typeIndex, syncRates };
+    const syncRates = Object.keys(syncTransform).sort ((a,b) => a - b);
+    const syncRatesByType = Object.assign (...[{}].concat (types.map ((t) => ({ [t]: syncRates.filter ((r) => (syncTransform[r][t] || []).length) })).filter ((o) => o[Object.keys(o)[0]].length)));
+    return { transform, syncTransform, ancestors, descendants, types, typeIndex, syncRates, syncRatesByType };
 }
 
 const replaceTermWithAlt = (term, descendants) => {
@@ -113,7 +114,7 @@ const expandInherits = (index) => {
     const transform = appendInherited (index.types, explicit, index.ancestors);
     const syncTransform = Object.assign (...[{}].concat(index.syncRates.map ((r) => ({ [r]: appendInherited (index.types, syncExplicit[r], index.ancestors) }))));
 
-    return { types: index.types, typeIndex: index.typeIndex, syncRates: index.syncRates, transform, syncTransform };
+    return { types: index.types, typeIndex: index.typeIndex, syncRates: index.syncRates, syncRatesByType: index.syncRatesByType, transform, syncTransform };
 };
 
 const compileTerm = (typeIndex, t) => {
@@ -146,12 +147,13 @@ const compileTypes = (rules) => {
     const index = expandInherits (makeGrammarIndex (rules));
     const { types, typeIndex, syncRates } = index;
     const transform = compileTransform (types, index.transform, typeIndex, 'rate');
-    const syncTransform = Object.assign (...[{}].concat(index.syncRates.map ((r) => ({ [r]: compileTransform (index.types, index.syncTransform[r], typeIndex, 'sync') }))));
+    const syncTransform = index.syncRates.map ((r) => compileTransform (index.types, index.syncTransform[r], typeIndex, 'sync'));
     let command = types.map(()=>({})), key = types.map(()=>({}));
     collectCommandsAndKeys (command, key, transform, types);
-    syncRates.forEach ((r) => collectCommandsAndKeys (command, key, syncTransform[r], types));
+    syncRates.forEach ((r, n) => collectCommandsAndKeys (command, key, syncTransform[n], types));
     const rateByType = transform.map ((rules) => rules.reduce ((total, rule) => total + rule.rate, 0));
-    return { transform, syncTransform, types, typeIndex, syncRates, rateByType, command, key }
+    const syncRatesByType = types.map ((_t, n) => syncRates.reduce ((l, _r, m) => l.concat (syncTransform[m][n].length ? [m] : []), []));
+    return { transform, syncTransform, types, typeIndex, syncRates, rateByType, syncRatesByType, command, key }
 }
 
 const syntaxErrorMessage = (e, text) => {
@@ -179,7 +181,7 @@ const parseOrUndefined = (text, error) => {
     return rules;
 }
 
-const grammarIndexToRuleList = (index) => index.types.reduce ((newRules,type,n) => newRules.concat([{type:'comment',comment:' Type '+n+': '+type+' ('+(index.transform[type]||[]).length+' rules)'}]).concat(index.transform[type]||[]).concat(index.syncRates.reduce((l,s)=>l.concat(index.syncTransform[s][type]||[]),[])), []);
-const compiledGrammarIndexToRuleList = (index) => index.types.reduce ((newRules,type,n) => newRules.concat([{type:'comment',comment:' Type '+n+': '+type+' ('+(index.transform[n]||[]).length+' rules)'}]).concat(index.transform[n]||[]).concat(index.syncRates.reduce((l,s)=>l.concat(index.syncTransform[s][n]||[]),[])), []);
+const grammarIndexToRuleList = (index) => index.types.reduce ((newRules,type,n) => newRules.concat([{type:'comment',comment:' Type '+n+': '+type+' ('+(index.transform[type]||[]).length+' rules)'}]).concat(index.transform[type]||[]).concat((index.syncRatesByType[type] || []).reduce((l,s)=>l.concat(index.syncTransform[s][type]),[])), []);
+const compiledGrammarIndexToRuleList = (index) => index.types.reduce ((newRules,type,n) => newRules.concat([{type:'comment',comment:' Type '+n+': '+type+' ('+(index.transform[n]||[]).length+' rules)'}]).concat(index.transform[n]||[]).concat((index.syncRatesByType[n] || []).reduce((l,s)=>l.concat(index.syncTransform[s][n]),[])), []);
 
 export { makeGrammarIndex, expandInherits, compileTypes, syntaxErrorMessage, parseOrUndefined, grammarIndexToRuleList, compiledGrammarIndexToRuleList }
