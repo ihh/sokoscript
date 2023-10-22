@@ -8,6 +8,7 @@ class Matcher {
         this.dir = lookups.charLookup.absDir[dir];
         this.termAddr = [];
         this.termCell = [];
+        this.termTailStart = [];
         this.failed = false;
     }
 
@@ -85,6 +86,8 @@ class Matcher {
         return lookups.vec2char (t.x, t.y);
       case 'state':
         return this.termCell[t.group-1].state.charAt(t.char-1);
+      case 'tail':
+        return this.termCell[t.group-1].state.substr(this.termTailStart[t.group-1]);
       default:
         throw new Error ("Unrecognized op '" + t.op + "' in " + JSON.stringify(t));
       }
@@ -120,8 +123,10 @@ class Matcher {
             const cell = this.board.getCell (x + this.x, y + this.y);
             const { type, state } = cell;
             const match = this.matchLhsTerm (term, type, state);
-            if (match)
+            if (match) {
                 this.termCell.push (cell);
+                this.termTailStart.push (term.state && term.state[term.state.length-1].op === 'any' ? term.state.length - 1 : state.length);
+            }
         } else
             this.failed = true;
         return this;

@@ -64,6 +64,7 @@ class Board {
         this.grammar = grammar;
         this.owner = owner;
         this.rng = rng;
+        this.maxStateLen = 64;
         this.time = 0;
         this.cell = new Array(size*size).fill(0).map((_)=>({type:0,state:''}));
         this.byType = new Array(grammar.types.length).fill(0).map((_,n)=>new RangeCounter(size*size,n===0));
@@ -84,6 +85,8 @@ class Board {
     }
 
     setCell (x, y, newValue) {
+        if (newValue.state?.length > this.maxStateLen)
+            newValue.state = newValue.state.substr (0, this.maxStateLen);
         this.setCellByIndex (this.xy2index (x, y), newValue);
     }
 

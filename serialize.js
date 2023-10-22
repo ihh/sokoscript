@@ -49,7 +49,8 @@ const makeStateChar = (t) => {
   case 'integer':
   case 'vector':
   case 'state':
-    return vecExpr(t);
+  case 'tail':
+      return vecExpr(t);
   default:
     throw new Error ("Unrecognized op '" + t.op + "' in " + JSON.stringify(t));
   }
@@ -72,7 +73,9 @@ const vecExpr = (t) => {
   case 'vector':
     return '@vec(' + t.x + ',' + t.y + ')';
   case 'state':
-    return '$' + t.group + '#' + t.char;
+    return '$' + (t.group || '') + '#' + t.char;
+  case 'tail':
+    return '$' + (t.group || '') + '#*';
   case 'matrix':
     return '%' + t.matrix;
   default:

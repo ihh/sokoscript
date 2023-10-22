@@ -243,6 +243,8 @@ RhsStateCharSeq
 
 RhsStateChar
  = PrimaryVecExpr
+ / "$#*" { return { op: "tail", group: 0 } }
+ / "$" group:NonZeroInteger "#*" { return { op: "tail", group } }
  / char:StateChar { return { op: "char", char } }
  / "\\" char:. { return { op: "char", char } }
 
@@ -251,12 +253,12 @@ StateChar = [0-9A-Za-z_]
 
 
 Rate
- = "rate={" _ r:Float _ "}" { return { rate: parseFloat(r) } }
- / "rate=" r:Float { return { rate: parseFloat(r) } }
+ = "rate={" _ rate:Float _ "}" { return { rate } }
+ / "rate=" rate:Float { return { rate } }
 
 Sync
- = "sync={" _ r:Float _ "}" { return { sync: parseFloat(r) } }
- / "sync=" r:Float { return { sync: parseFloat(r) } }
+ = "sync={" _ sync:Float _ "}" { return { sync } }
+ / "sync=" sync:Float { return { sync } }
 
 Command
  = "command={" command:EscapedString "}" { return { command } }
@@ -292,9 +294,9 @@ SignedInteger
  / "0"
 
 Float
-  = (NonZeroInteger / "0" / "") "." [0-9]*
+  = (NonZeroInteger / "0" / "") "." [0-9]+ { return parseFloat(text()) }
   / NonZeroInteger
-  / "0"
+  / "0" { return 0 }
 
 EscapedString
  = c:EscapedChar s:EscapedString { return c + s }

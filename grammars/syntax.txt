@@ -37,4 +37,7 @@ z/[@moore(@f)] : z/@f.
 player crate >l> * : $3 player crate, command={z} .
 player >e> crate _ : _ $1 $2, key={x} .
 
-s : t, sync=3.
+s : t, sync=3.1.
+
+a b: b a.
+a/* b: b/$1#* a.
