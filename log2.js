@@ -1,5 +1,5 @@
 // Input: 32-bit unsigned integer
-// Output: fast approximation to (log2(x) * 2^26)
+// Output: fast piecewise linear approximation to (log2(x) * 2^26)
 const fastLog2 = (x) => {
     x = x & 0xffffffff;
     const lg = fastLog2Floor(x);
