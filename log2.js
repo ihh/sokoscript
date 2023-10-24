@@ -1,11 +1,3 @@
-// Input: 32-bit unsigned integer
-// Output: fast piecewise linear approximation to (log2(x) * 2^26)
-const fastLog2 = (x) => {
-    x = x & 0xffffffff;
-    const lg = fastLog2Floor(x);
-    return (lg << 26) | ((x & 0x7fffffff) >> (37 - lg));
-}
-
 let LogTable256 = new Array(256).fill(0);
 for (let i = 2; i < 256; i++)
   LogTable256[i] = 1 + LogTable256[i >> 1];
@@ -23,4 +15,24 @@ const fastLog2Floor = (v) => {
     return LogTable256[v];
 }
 
-export { fastLog2 };
+// Input: 32-bit unsigned integer
+// Output: 31-bit integer that is a fast piecewise linear approximation to (log2(x) * 2^26)
+const fastLg_leftShift26 = (x) => {
+    x = x & 0xffffffff;
+    const lg = fastLog2Floor(x);
+    const nUsefulBits = Math.min (lg, 26);  // this is how many bits of x we can use for the piecewise linear section
+    return (lg << 26) | ((x & ((1<<nUsefulBits) - 1)) << (26 - nUsefulBits));
+}
+const fastLg_leftShift26_max = fastLg_leftShift26(0xffffffff) + 1;
+
+// Input: 32-bit unsigned integer
+// Output: 31-bit integer that is a fast piecewise linear approximation to (loge(x) * 2^26)
+const log2_21 = Math.round (Math.log(2) * (1 << 21));  // multiplier of (1<<21) chosen to minimize rounding error
+const fastLn_leftShift26 = (x) => {
+    return BigInt.asIntN (32, (BigInt(fastLg_leftShift26(x)) * BigInt(log2_21)) >> BigInt(21));
+}
+const fastLn_leftShift26_max = fastLn_leftShift26(0xffffffff) + 1;
+
+// For an exponentially-distributed waiting time with expectation 1, use (fastLn_leftShift26_max - fastLn(rng.rnd32())) >> 26
+
+export { fastLg_leftShift26, fastLg_leftShift26_max, fastLn_leftShift26, fastLn_leftShift26_max };
