@@ -219,6 +219,8 @@ class Board {
         return lookups.dirs[Math.floor (this.rng.random() * 4)];
     }
 
+    // if hardStop is true, then there is a concrete event at time t, and we will advance the clock to that point even if nothing happens in the final interval
+    // if hardStop is false, we stop the clock (and the random number generator) at the last event *before* t, so that we can resume consistently if more events (e.g. messages) arrive after t but before the next event
     evolveAsyncToTime (t, hardStop) {
         while (true) {
             const mt = this.rng.mt;
