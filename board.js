@@ -126,6 +126,30 @@ class Board {
 
     // Random waiting time until next event, and selection of next event
     // Ultimately this could all be integerized for lightning-fast implementation, but that isn't important yet! Premature optimization!
+
+// Sigh....
+
+//    Suppose w is an exponentially distributed rv with mean 1
+//    W = w * 2^26  is the value returned by (fastLn_leftShift26_max - fastLn_leftShift26(rng.rnd32()))
+    
+//    r = sum_cells(cell_rate)
+//    R = r * 10^6  is the value returned by an integer encoding of our fixed-point rate values
+    
+//    Time to next event in seconds = t = w / r = (W / 2^26) / (R / 10^6) = (10^6 W/R) / 2^26
+    
+//    Max cell rate is Q, number of cells on board is B=S*S where S=board size
+//    R_max = QB = Q S^2
+    
+//    Minimum unit of time (a "tick") needs to be 1/R_max = 1/(QB) = 1/(QS^2) seconds
+    
+//    Thus, time to next event in ticks = T = tQS^2 = 10^6 * (Q S^2 W / R) / 2^26
+    
+//    If we allow for up to Q=2^10, S=2^11 then a tick can be 2^{-32} of a second
+//     and T = 64 * 10^6 * W/R
+
+//    NB actual Q_max is 1000<1024 so R_max < 2^32 which is good, we can still store it as a 32-bit int
+    
+
     nextRule (maxWait) {
         const typeRates = this.totalTypeRates();
         const totalRate = sum (typeRates);

@@ -253,12 +253,12 @@ StateChar = [0-9A-Za-z_]
 
 
 Rate
- = "rate={" _ rate:Float _ "}" { return { rate } }
- / "rate=" rate:Float { return { rate } }
+ = "rate={" _ rate:FixedPoint _ "}" { return { rate } }
+ / "rate=" rate:FixedPoint { return { rate } }
 
 Sync
- = "sync={" _ sync:Float _ "}" { return { sync } }
- / "sync=" sync:Float { return { sync } }
+ = "sync={" _ sync:FixedPoint _ "}" { return { sync } }
+ / "sync=" sync:FixedPoint { return { sync } }
 
 Command
  = "command={" command:EscapedString "}" { return { command } }
@@ -293,10 +293,17 @@ SignedInteger
  / "-" NonZeroInteger
  / "0"
 
-Float
-  = (NonZeroInteger / "0" / "") "." [0-9]+ { return parseFloat(text()) }
-  / NonZeroInteger
-  / "0" { return 0 }
+FixedPoint
+ = IntegerPart "." FractionalPart { return parseFloat(text()) }
+ / IntegerPart { return parseFloat(text()) }
+ / "." FractionalPart { return parseFloat(text()) }
+ / ("1000" / "0") { return parseFloat(text()) }
+
+IntegerPart = [0-9] / [0-9][0-9] / [0-9][0-9][0-9]
+
+FractionalPart
+ = [0-9] / [0-9][0-9] / [0-9][0-9][0-9] / [0-9][0-9][0-9][0-9]
+ / [0-9][0-9][0-9][0-9][0-9] / [0-9][0-9][0-9][0-9][0-9][0-9]
 
 EscapedString
  = c:EscapedChar s:EscapedString { return c + s }
