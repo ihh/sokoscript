@@ -148,6 +148,7 @@ class Board {
 //     and T = 64 * 10^6 * W/R
 
 //    NB actual Q_max is 1000<1024 so R_max < 2^32 which is good, we can still store it as a 32-bit int
+//    In any case, running at 2^32 ticks/second would be ~4.3GHz which is certainly faster than we can reach!
     
 
     nextRule (maxWait) {
