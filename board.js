@@ -219,11 +219,15 @@ class Board {
         return lookups.dirs[Math.floor (this.rng.random() * 4)];
     }
 
-    evolveAsyncToTime (t) {
+    evolveAsyncToTime (t, hardStop) {
         while (true) {
+            const mt = this.rng.mt;
             const r = this.nextRule (t - this.time);
             if (!r) {
-                this.time = t;
+                if (hardStop)
+                    this.time = t;
+                else
+                    this.rng.mt = mt;  // rewind random number generator
                 break;
             }
             const { x, y, rule, dir } = r;
@@ -232,33 +236,36 @@ class Board {
         }
     }
 
-    evolveToTime (t) {
+    evolveToTime (t, hardStop) {
         const syncPeriods = this.grammar.syncRates.map ((r) => 1 / r);
         const syncCategories = syncPeriods.map((_p,n)=>n).reverse();
         while (this.time < t) {
             const nextSyncTimes = syncPeriods.map ((p) => this.time + p - (this.time % p));
             const nextTime = Math.min (t, ...nextSyncTimes);
-            this.evolveAsyncToTime (nextTime);
             const nextSyncCategories = syncCategories.filter ((n) => nextSyncTimes[n] === nextTime);
-            const updates = knuthShuffle (nextSyncCategories.reduce ((l, nSync) =>
-                l.concat (this.grammar.typesBySyncRate[nSync].reduce ((l, nType) => {
-                    const rules = this.grammar.syncTransform[nSync][nType];
-                    return l.concat (this.byType[nType].elements().reduce ((l, index) => {
-                        const xy = this.index2xy(index);
-                        return l.concat (rules.map ((rule) => [xy,rule]));
-                    }, []));
-                }, [])), []), this.rng).reduce ((updates, xy_rule) =>
-                    updates.concat (transformRuleUpdate(this,xy_rule[0][0],xy_rule[0][1],this.randomDir(),xy_rule[1])), []);
-            updates.forEach ((update) => this.setCell (...update));
+            const nextTimeIsSyncEvent = nextSyncCategories.length > 0;
+            this.evolveAsyncToTime (nextTime, hardStop || nextTimeIsSyncEvent);
+            if (nextTimeIsSyncEvent) {
+                const updates = knuthShuffle (nextSyncCategories.reduce ((l, nSync) =>
+                    l.concat (this.grammar.typesBySyncRate[nSync].reduce ((l, nType) => {
+                        const rules = this.grammar.syncTransform[nSync][nType];
+                        return l.concat (this.byType[nType].elements().reduce ((l, index) => {
+                            const xy = this.index2xy(index);
+                            return l.concat (rules.map ((rule) => [xy,rule]));
+                        }, []));
+                    }, [])), []), this.rng).reduce ((updates, xy_rule) =>
+                        updates.concat (transformRuleUpdate(this,xy_rule[0][0],xy_rule[0][1],this.randomDir(),xy_rule[1])), []);
+                updates.forEach ((update) => this.setCell (...update));
+            }
        }
     }
 
-    evolveAndProcess (t, messages) {
+    evolveAndProcess (t, messages, hardStop) {
         messages.toSorted ((a,b) => a.time - b.time).forEach ((message) => {
-            this.evolveToTime (message.time);
+            this.evolveToTime (message.time, true);
             this.processMessage (message);
         })
-        this.evolveToTime (t);
+        this.evolveToTime (t, hardStop);
     }
 
     toString() {
