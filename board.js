@@ -158,7 +158,9 @@ class Board {
 //    so the random number generation will really need to be a BigInt (intermediate value is 104 bits, well more than 64)
 //    NB running at 2^32 ticks/second would be ~4.3GHz which is certainly faster than we can reach!
 //    For many "reasonable" boards (few fast particles), R_max may fit into 32 bits, and randomInt() may need only 64 bits
+
 //    It is obviously true that if we sacrificed some slower moving particles by setting M=2^10 instead of 2^20 (allowing mHz but not uHz), we'd extend this regime.
+//    EVEN BETTER: set M=1, round all rates up to nearest integer Hz, and implement fractional part by rejection sampling. I think we have a winner!
 
     nextRule (maxWait) {
         const typeRates = this.totalTypeRates();
