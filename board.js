@@ -47,10 +47,13 @@ class RangeCounter {
     }
 }
 
-const knuthShuffle = (list, rng) => {
+// return random integer in the range [0,max)
+const randomInt = (rng, max) => Number ((BigInt(max) * BigInt(rng.int())) >> BigInt(32));
+
+const knuthShuffle = (rng, list) => {
     const len = list.length;
     for (let k = 0; k < len - 1; ++k) {
-        const i = k + Math.floor (rng.random() * (len - k));
+        const i = k + randomInt (rng, len - k);
         [list[i], list[k]] = [list[k], list[i]];
     }
     return list;
@@ -65,7 +68,7 @@ class Board {
         this.owner = owner;
         this.rng = rng;
         this.maxStateLen = 64;
-        this.time = 0;
+        this.time = this.lastEventTime = 0;
         this.cell = new Array(size*size).fill(0).map((_)=>({type:0,state:''}));
         this.byType = new Array(grammar.types.length).fill(0).map((_,n)=>new RangeCounter(size*size,n===0));
         this.byID = {};
@@ -130,26 +133,32 @@ class Board {
 // Sigh....
 
 //    Suppose w is an exponentially distributed rv with mean 1
-//    W = w * 2^26  is the value returned by (fastLn_leftShift26_max - fastLn_leftShift26(rng.rnd32()))
+//    W = w * F   where F = 2^26  is the value returned by (fastLn_leftShift26_max - fastLn_leftShift26(rng.rnd32()))
     
 //    r = sum_cells(cell_rate)
-//    R = r * 10^6  is the value returned by an integer encoding of our fixed-point rate values
+//    R = r * M  is the value returned by an integer encoding of our fixed-point rate values
+//    (we need at least M = 10^6 but in principle we can set M = 2^20 without losing much precision)
     
-//    Time to next event in seconds = t = w / r = (W / 2^26) / (R / 10^6) = (10^6 W/R) / 2^26
+//    Time to next event in seconds = t = w / r = (W / F) / (R / M) = MW/(FR)
     
 //    Max cell rate is Q, number of cells on board is B=S*S where S=board size
-//    R_max = QB = Q S^2
-    
-//    Minimum unit of time (a "tick") needs to be 1/R_max = 1/(QB) = 1/(QS^2) seconds
-    
-//    Thus, time to next event in ticks = T = tQS^2 = 10^6 * (Q S^2 W / R) / 2^26
-    
-//    If we allow for up to Q=2^10, S=2^11 then a tick can be 2^{-32} of a second
-//     and T = 64 * 10^6 * W/R
+//    r_max = QB = Q S^2
+//    R_max = r_max * M = MQS^2
 
-//    NB actual Q_max is 1000<1024 so R_max < 2^32 which is good, we can still store it as a 32-bit int
-//    In any case, running at 2^32 ticks/second would be ~4.3GHz which is certainly faster than we can reach!
+//    Minimum unit of time (a "tick") needs to be 1/r_max = 1/(QB) = 1/(QS^2) seconds
     
+//    Thus, time to next event in ticks = T = tQS^2 = M Q S^2 W / (FR)
+    
+//    If we allow for up to Q=2^10, S=2^11 then a tick can be 2^{-32} of a second, QS^2/F=64,
+//     and T = 64 * M * W/R
+//     (we should actually take max(T,1) to ensure every event takes at least one tick)
+
+//    NB actual Q_max is 1000<1024 so r_max < 2^32, however R_max = r_max * M so we do need to store R as a BigInt
+//    and we will also need more than 32 bits of randomness; specifically, if S=2^11, Q=2^10, and M=2^20 then R_max=2^52
+//    so the random number generation will really need to be a BigInt (intermediate value is 104 bits, well more than 64)
+//    NB running at 2^32 ticks/second would be ~4.3GHz which is certainly faster than we can reach!
+//    For many "reasonable" boards (few fast particles), R_max may fit into 32 bits, and randomInt() may need only 64 bits
+//    It is obviously true that if we sacrificed some slower moving particles by setting M=2^10 instead of 2^20 (allowing mHz but not uHz), we'd extend this regime.
 
     nextRule (maxWait) {
         const typeRates = this.totalTypeRates();
@@ -222,48 +231,51 @@ class Board {
     // if hardStop is true, then there is a concrete event at time t, and we will advance the clock to that point even if nothing happens in the final interval
     // if hardStop is false, we stop the clock (and the random number generator) at the last event *before* t, so that we can resume consistently if more events (e.g. messages) arrive after t but before the next event
     evolveAsyncToTime (t, hardStop) {
-        while (true) {
+        while (this.time < t) {
             const mt = this.rng.mt;
-            const r = this.nextRule (t - this.time);
+            const r = this.nextRule (t - this.lastEventTime);
             if (!r) {
+                this.time = t;
                 if (hardStop)
-                    this.time = t;
+                    this.lastEventTime = t;
                 else
                     this.rng.mt = mt;  // rewind random number generator
                 break;
             }
             const { x, y, rule, dir } = r;
             applyTransformRule (this, x, y, this.randomDir(), rule);
-            this.time += wait;
+            this.time = this.lastEventTime = this.lastEventTime + wait;
         }
     }
 
     evolveToTime (t, hardStop) {
         const syncPeriods = this.grammar.syncRates.map ((r) => 1 / r);
         const syncCategories = syncPeriods.map((_p,n)=>n).reverse();
-        while (this.time < t) {
-            const nextSyncTimes = syncPeriods.map ((p) => this.time + p - (this.time % p));
+        while (this.lastEventTime < t) {
+            const nextSyncTimes = syncPeriods.map ((p) => this.lastEventTime + p - (this.lastEventTime % p));
             const nextTime = Math.min (t, ...nextSyncTimes);
             const nextSyncCategories = syncCategories.filter ((n) => nextSyncTimes[n] === nextTime);
             const nextTimeIsSyncEvent = nextSyncCategories.length > 0;
             this.evolveAsyncToTime (nextTime, hardStop || nextTimeIsSyncEvent);
             if (nextTimeIsSyncEvent) {
-                const updates = knuthShuffle (nextSyncCategories.reduce ((l, nSync) =>
+                const updates = knuthShuffle (this.rng, nextSyncCategories.reduce ((l, nSync) =>
                     l.concat (this.grammar.typesBySyncRate[nSync].reduce ((l, nType) => {
                         const rules = this.grammar.syncTransform[nSync][nType];
                         return l.concat (this.byType[nType].elements().reduce ((l, index) => {
                             const xy = this.index2xy(index);
                             return l.concat (rules.map ((rule) => [xy,rule]));
                         }, []));
-                    }, [])), []), this.rng).reduce ((updates, xy_rule) =>
+                    }, [])), [])).reduce ((updates, xy_rule) =>
                         updates.concat (transformRuleUpdate(this,xy_rule[0][0],xy_rule[0][1],this.randomDir(),xy_rule[1])), []);
                 updates.forEach ((update) => this.setCell (...update));
             }
        }
     }
 
+    // evolve board, processing sync rules and messages
+    // There is probably no reason to call this with hardStop==true, unless imposing another time limit that is well-defined within the game
     evolveAndProcess (t, messages, hardStop) {
-        messages.toSorted ((a,b) => a.time - b.time).forEach ((message) => {
+        messages.toSorted ((a,b) => a.time - b.time).reduce ((message) => {
             this.evolveToTime (message.time, true);
             this.processMessage (message);
         })
@@ -272,6 +284,7 @@ class Board {
 
     toString() {
         return JSON.stringify ({ time: this.time,
+                                 lastEventTime: this.lastEventTime,
                                  mt: this.rng.mt,
                                  types: this.grammar.types,
                                  cell: this.cell.map ((cell) => [cell.type].concat(cell.state || cell.meta ? [cell.state || ''].concat(cell.meta ? [cell.meta] : []) : [])) })
@@ -280,6 +293,7 @@ class Board {
     initFromString (str) {
         const json = JSON.parse (str);
         this.time = json.time;
+        this.lastEventTime = json.lastEventTime;
         this.rng.mt = json.mt;
         if (json.cell.length !== this.cell.length)
             throw new Error ("Tried to load "+json.cell.size()+"-cell board file into "+this.cell.size()+"-cell board");

@@ -11,6 +11,7 @@
           .reduce ((result, prop) => result && validatePositionals (expr[prop], matchedStateChars), true);
   };
 
+  const sum = (weights) => weights.reduce ((s, w) => s + w, 0);
   const reducePred = (args, pred) => args.reduce ((result, arg) => result && pred(arg), true);
   const altList = (alt) => alt.op === 'alt' ? alt.alt : [alt];
   const reduceAlt = (alt, pred) => alt.op === 'negterm' ? reduceAlt (alt.term, pred) : reducePred (altList(alt), pred);
@@ -40,7 +41,12 @@
     return reducePred (rule.parents, isValidAncestor);
   }
 
- const countDuplicateAttributes = (attrs) => {
+  const ruleSubject = (rule) => rule.lhs[0].type;
+  const ruleRate = (rule) => rule.sync || rule.rate || 1;
+  const maxRuleRate = 1000;
+  const validateTotalRates = (rule, rules) => sum ([rule].concat(rules.filter((r)=>ruleSubject(r)===ruleSubject(rule))).map(ruleRate)) <= maxRuleRate;
+
+  const countDuplicateAttributes = (attrs) => {
     let count = {};
     attrs.forEach ((attr) => Object.keys(attr).forEach((k) => count[k] = (count[k] || 0) + 1));
     const duplicates = Object.keys(count).filter((k) => count[k] > 1);
@@ -58,7 +64,7 @@
 }
 
 RuleSet
- = r:Rule _ "." _ s:RuleSet &{ return validateInheritance(r,s) } { return [r].concat(s) }
+ = r:Rule _ "." _ s:RuleSet &{ return validateInheritance(r,s) } &{ return validateTotalRates(r,s) } { return [r].concat(s) }
  / r:Rule _ "." _ { return [r] }
  / r:Rule _ { return [r] }
  / c:Comment _ s:RuleSet { return [c].concat (s) }
@@ -299,11 +305,11 @@ FixedPoint
  / "." FractionalPart { return parseFloat(text()) }
  / ("1000" / "0") { return parseFloat(text()) }
 
-IntegerPart = [0-9] / [0-9][0-9] / [0-9][0-9][0-9]
+IntegerPart = [0-9][0-9][0-9] / [0-9][0-9] / [0-9]
 
 FractionalPart
- = [0-9] / [0-9][0-9] / [0-9][0-9][0-9] / [0-9][0-9][0-9][0-9]
- / [0-9][0-9][0-9][0-9][0-9] / [0-9][0-9][0-9][0-9][0-9][0-9]
+ = [0-9][0-9][0-9][0-9][0-9][0-9] / [0-9][0-9][0-9][0-9][0-9]
+ / [0-9][0-9][0-9][0-9] / [0-9][0-9][0-9] / [0-9][0-9] / [0-9]
 
 EscapedString
  = c:EscapedChar s:EscapedString { return c + s }

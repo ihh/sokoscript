@@ -29,7 +29,7 @@ const fastLg_leftShift26_max = fastLg_leftShift26(0xffffffff) + 1;
 // Output: 31-bit integer that is a fast piecewise linear approximation to (loge(x) * 2^26)
 const log2_21 = Math.round (Math.log(2) * (1 << 21));  // multiplier of (1<<21) chosen to minimize rounding error
 const fastLn_leftShift26 = (x) => {
-    return BigInt.asIntN (32, (BigInt(fastLg_leftShift26(x)) * BigInt(log2_21)) >> BigInt(21));
+    return Number ((BigInt(fastLg_leftShift26(x)) * BigInt(log2_21)) >> BigInt(21));
 }
 const fastLn_leftShift26_max = fastLn_leftShift26(0xffffffff) + 1;
 
