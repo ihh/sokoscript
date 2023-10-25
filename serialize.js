@@ -141,10 +141,20 @@ const makeRhs = (rhs, sep) => {
   return rhs.map(rhsTerm).join(sep);
 };
 
+const fixedPoint6 = (rate) => {
+  let s = Math.floor (rate / 1000000), f = Math.floor (rate % 1000000);
+  if (f) {
+    while (f < 100000)
+      f *= 10;
+    s = (s + '.' + f).replace(/0+$/g,'');
+  }
+  return s;
+}
+
 const serialize = (rules) => {
   const attrs = (rule) =>
-    (rule.rate ? (' rate={' + rule.rate + '}') : '')
-    + (rule.sync ? (' sync={' + rule.sync + '}') : '')
+    (rule.rate ? (' rate={' + fixedPoint6(rule.rate) + '}') : '')
+    + (rule.sync ? (' sync={' + fixedPoint6(rule.sync) + '}') : '')
     + (rule.command ? (' command={' + escapeAttr(rule.command) + '}') : '')
     + (rule.key ? (' key={' + escapeAttr(rule.key) + '}') : '')
     + (rule.reward ? (' reward={' + rule.reward + '}') : '')

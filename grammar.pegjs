@@ -300,16 +300,20 @@ SignedInteger
  / "0"
 
 FixedPoint
- = IntegerPart "." FractionalPart { return parseFloat(text()) }
- / IntegerPart { return parseFloat(text()) }
- / "." FractionalPart { return parseFloat(text()) }
- / ("1000" / "0") { return parseFloat(text()) }
+ = i:IntegerPart "." f:FractionalPart { return 1000000 * parseInt(i) + parseInt(f) }
+ / IntegerPart { return 1000000 * parseInt(i) }
+ / "." f:FractionalPart { return parseInt(f) }
+ / ("1000" / "0") { return parseInt(text()) }
 
 IntegerPart = [0-9][0-9][0-9] / [0-9][0-9] / [0-9]
 
 FractionalPart
- = [0-9][0-9][0-9][0-9][0-9][0-9] / [0-9][0-9][0-9][0-9][0-9]
- / [0-9][0-9][0-9][0-9] / [0-9][0-9][0-9] / [0-9][0-9] / [0-9]
+ = [0-9][0-9][0-9][0-9][0-9][0-9] { return text() }
+ / [0-9][0-9][0-9][0-9][0-9]  { return text()+'0' }
+ / [0-9][0-9][0-9][0-9]      { return text()+'00' }
+ / [0-9][0-9][0-9]          { return text()+'000' }
+ / [0-9][0-9]              { return text()+'0000' }
+ / [0-9]                  { return text()+'00000' }
 
 EscapedString
  = c:EscapedChar s:EscapedString { return c + s }
