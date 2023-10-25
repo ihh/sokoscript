@@ -164,11 +164,11 @@ class Board {
 
     nextRule (maxWait) {
         const typeRates = this.totalTypeRates();
-        const totalRate = sum (typeRates) * 1e-6;   // convert from microHertz to Hertz
+        const totalRate = sum (typeRates);
         if (totalRate === 0)
             return null;
         const r1 = this.rng.random();
-        const wait = -Math.log(r1 > 0 ? r1 : Number.MIN_VALUE) / totalRate;
+        const wait = -Math.log(r1 > 0 ? r1 : Number.MIN_VALUE) / totalRate  / 1e-6;   // convert from microHertz to Hertz;
         if (wait > maxWait)
             return null;
         const r2 = this.rng.random();
