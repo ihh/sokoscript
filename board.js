@@ -69,7 +69,7 @@ class Board {
         this.owner = owner;
         this.rng = rng;
         this.maxStateLen = 64;
-        this.time = this.lastEventTime = 0;
+        this.time = this.lastEventTime = BigInt(0);
         this.cell = new Array(size*size).fill(0).map((_)=>({type:0,state:''}));
         this.byType = new Array(grammar.types.length).fill(0).map((_,n)=>new RangeCounter(size*size,n===0));
         this.byID = {};
@@ -165,7 +165,7 @@ class Board {
         if (totalRate == 0)
             return null;
         const r1 = this.rng.int();
-        const wait = BigInt (64 * (fastLn_leftShift26_max - fastLn_leftShift26(r1))) / BigInt(totalRate);
+        const wait = Math.max (BigInt(1), BigInt (64 * (fastLn_leftShift26_max - fastLn_leftShift26(r1))) / BigInt(totalRate));
         if (wait > maxWait)
             return null;
         const r2 = randomInt (this.rng, totalRate);
@@ -242,8 +242,8 @@ class Board {
                     this.rng.mt = mt;  // rewind random number generator
                 break;
             }
-            const { x, y, rule, dir } = r;
-            applyTransformRule (this, x, y, this.randomDir(), rule);
+            const { wait, x, y, rule, dir } = r;
+            applyTransformRule (this, x, y, dir, rule);
             this.time = this.lastEventTime = this.lastEventTime + wait;
         }
     }
