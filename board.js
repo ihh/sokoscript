@@ -1,5 +1,6 @@
 import * as lookups from './lookups.js';
 import { applyTransformRule, transformRuleUpdate } from './engine.js';
+import { fastLn_leftShift26_max, fastLn_leftShift26 } from './log2.js';
 
 // Time-efficient data structure for storing a set of ints in the range [0,n) where n is a power of 2
 // Uses 2n memory.
@@ -59,7 +60,7 @@ const knuthShuffle = (rng, list) => {
     return list;
 }
 
-const sum = (weights) => weights.reduce ((s, w) => s + w, 0);
+const bigSum = (weights) => weights.reduce ((s, w) => s + w, BigInt(0));
 
 class Board {
     constructor (size, grammar, owner, rng) {
@@ -120,11 +121,7 @@ class Board {
     }
 
     totalTypeRates() {
-        return this.byType.map ((counter, type) => counter.total() * this.grammar.rateByType[type]);
-    }
-
-    totalRate() {
-        return sum (this.totalTypeRates());
+        return this.byType.map ((counter, type) => BigInt(counter.total()) * this.grammar.rateByType[type]);
     }
 
     // Random waiting time until next event, and selection of next event
@@ -164,37 +161,38 @@ class Board {
 
     nextRule (maxWait) {
         const typeRates = this.totalTypeRates();
-        const totalRate = sum (typeRates);
-        if (totalRate === 0)
+        const totalRate = bigSum (typeRates);
+        if (totalRate == 0)
             return null;
-        const r1 = this.rng.random();
-        const wait = -Math.log(r1 > 0 ? r1 : Number.MIN_VALUE) / totalRate  / 1e-6;   // convert from microHertz to Hertz;
+        const r1 = this.rng.int();
+        const wait = BigInt (64 * (fastLn_leftShift26_max - fastLn_leftShift26(r1))) / BigInt(totalRate);
         if (wait > maxWait)
             return null;
-        const r2 = this.rng.random();
-        let r = r2 * totalRate;
+        const r2 = randomInt (this.rng, totalRate);
         let type = 0, w;
-        while (r >= 0) {
+        while (r2 >= 0) {
             w = typeRates[type];
-            r -= w;
+            r2 -= w;
             ++type;
         }
         --type;
-        r = (r / w) + 1;
+        r2 += w;
         const t = this.grammar.rateByType[type];
-        const n = Math.floor (r / t);
-        r = (r - n*t) / t;
+        const n = Math.floor (r2 / t);
+        r2 = r2 - n*t;
         const rules = this.grammar.transform[type];
         let ruleIndex = 0, rule;
-        while (r >= 0) {
+        while (r2 >= 0) {
             rule = rules[ruleIndex];
-            w = rule.rate;
-            r -= w;
+            w = rule.rate_Hz;
+            r2 -= w;
             ++ruleIndex;
         }
         --ruleIndex;
-        r = (r / w) + 1;
-        const dir = Math.floor (r*4);
+        const r3 = this.rng.int();
+        if ((r3 & 0x3fffffff) > rule.acceptProb_leftShift30)
+            return null;
+        const dir = Math.floor (r3 >>> 30);
         const [x,y] = this.index2xy (this.byType[type].kthElement(n));
         return { wait, x, y, rule, dir }
     }
@@ -251,7 +249,8 @@ class Board {
     }
 
     evolveToTime (t, hardStop) {
-        const syncPeriods = this.grammar.syncRates.map ((r) => 1 / r);
+        const million = 1000000;
+        const syncPeriods = this.grammar.syncRates.map ((r) => (BigInt(million) << BigInt(32)) / BigInt(r));  // convert from microHz to Hz
         const syncCategories = syncPeriods.map((_p,n)=>n).reverse();
         while (this.lastEventTime < t) {
             const nextSyncTimes = syncPeriods.map ((p) => this.lastEventTime + p - (this.lastEventTime % p));
