@@ -177,7 +177,7 @@ class Board {
         if (totalRate == 0)
             return null;
         const r1 = this.rng.int();
-        const wait = bigMax (BigInt(1), BigInt (64 * (fastLn_leftShift26_max - fastLn_leftShift26(r1))) / BigInt(totalRate));
+        const wait = BigInt (64 * (fastLn_leftShift26_max - fastLn_leftShift26(r1))) / BigInt(totalRate) || BigInt(1);
         if (wait > maxWait)
             return null;
         const r2 = randomBigInt (this.rng, totalRate);
