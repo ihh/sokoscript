@@ -30,6 +30,6 @@ if (opt.options.board)
     board.initFromString (fs.readFileSync(opt.options.board).toString());
 
 if (opt.options.time)
-    board.evolveToTime (opt.options.time);
+    board.evolveToTime (BigInt(opt.options.time) << BigInt(32));
 
 console.log (board.toString());

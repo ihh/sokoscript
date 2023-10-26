@@ -125,11 +125,11 @@ const compileTerm = (typeIndex, t) => {
     return { ...t, type: typeIndex[t.type] }
 };
 
-const compileTransform = (types, transform, typeIndex, rateKey) =>
+const compileTransform = (types, transform, typeIndex, rateKey, defaultRate) =>
  types.map ((type) =>
     (transform[type] || []).map ((rule) =>
         rule.type === 'transform'
-        ? { [rateKey]: 1,
+        ? { [rateKey]: defaultRate,
             ...rule,
             lhs: rule.lhs.map((t) => compileTerm(typeIndex,t)),
             rhs: rule.rhs.map((t) => compileTerm(typeIndex,t)) }
@@ -146,24 +146,28 @@ const collectCommandsAndKeys = (command, key, transform, types) =>
 const compileTypes = (rules) => {
     const index = expandInherits (makeGrammarIndex (rules));
     const { types, typeIndex, syncRates } = index;
-    const transform = compileTransform (types, index.transform, typeIndex, 'rate_Hz');
-    const syncTransform = index.syncRates.map ((r) => compileTransform (index.types, index.syncTransform[r], typeIndex, 'sync'));
+    const million = 1000000;
+    const transform = compileTransform (types, index.transform, typeIndex, 'rate', million);
+    const syncTransform = index.syncRates.map ((r) => compileTransform (index.types, index.syncTransform[r], typeIndex, 'sync', 1));
 
     // convert from microHertz rate to Hertz with rejection
-    const million = 1000000;
+    const bigMillion = BigInt(million), big2pow30minus1 = BigInt(0x3fffffff);
     transform.forEach ((rules) =>
         rules.forEach ((rule) => {
-            rule.rate_Hz = Math.ceil (rule.rate / million);
-            rule.acceptProb_leftShift30 = Number ((BigInt(rule.rate) * BigInt(0x3fffffff)) / BigInt(rule.rate_Hz*million));
+            rule.rate_Hz = BigInt (Math.ceil (rule.rate / million));
+            rule.acceptProb_leftShift30 = Number (BigInt(rule.rate) * big2pow30minus1 / (rule.rate_Hz * bigMillion));
         }))
 
     let command = types.map(()=>({})), key = types.map(()=>({}));
     collectCommandsAndKeys (command, key, transform, types);
     syncRates.forEach ((r, n) => collectCommandsAndKeys (command, key, syncTransform[n], types));
-    const rateByType = transform.map ((rules) => rules.reduce ((total, rule) => total + BigInt(rule.rate_Hz), BigInt(0)));  // async rates measured in Hz, with accept probabilities providing microHz resolution
+    const rateByType = transform.map ((rules) => rules.reduce ((total, rule) => total + rule.rate_Hz, BigInt(0)));  // async rates measured in Hz, with accept probabilities providing microHz resolution
     const syncRatesByType = types.map ((_t, n) => syncRates.reduce ((l, _r, m) => l.concat (syncTransform[m][n].length ? [m] : []), []));  // sync rates measured in microHz
     const typesBySyncRate = syncRates.map ((_r, m) => types.reduce ((l, _t, n) => l.concat (syncTransform[m][n].length ? [n] : []), []));
-    return { transform, syncTransform, types, typeIndex, syncRates, rateByType, syncRatesByType, typesBySyncRate, command, key }
+    const syncPeriods = syncRates.map ((r) => (BigInt(million) << BigInt(32)) / BigInt(r));  // convert from microHz to Hz
+    const syncCategories = syncPeriods.map((_p,n)=>n).reverse();
+
+    return { transform, syncTransform, types, typeIndex, syncRates, syncPeriods, syncCategories, rateByType, syncRatesByType, typesBySyncRate, command, key }
 }
 
 const syntaxErrorMessage = (e, text) => {
@@ -194,4 +198,12 @@ const parseOrUndefined = (text, error) => {
 const grammarIndexToRuleList = (index) => index.types.reduce ((newRules,type,n) => newRules.concat([{type:'comment',comment:' Type '+n+': '+type+' ('+(index.transform[type]||[]).length+' rules)'}]).concat(index.transform[type]||[]).concat((index.syncRatesByType[type] || []).reduce((l,s)=>l.concat(index.syncTransform[s][type]),[])), []);
 const compiledGrammarIndexToRuleList = (index) => index.types.reduce ((newRules,type,n) => newRules.concat([{type:'comment',comment:' Type '+n+': '+type+' ('+(index.transform[n]||[]).length+' rules)'}]).concat(index.transform[n]||[]).concat((index.syncRatesByType[n] || []).reduce((l,s)=>l.concat(index.syncTransform[s][n]),[])), []);
 
-export { makeGrammarIndex, expandInherits, compileTypes, syntaxErrorMessage, parseOrUndefined, grammarIndexToRuleList, compiledGrammarIndexToRuleList }
+const bigIntContainerToObject = (x) => {
+    return JSON.parse(JSON.stringify(x, (key, value) =>
+        typeof value === 'bigint'
+            ? value.toString() + 'n'
+            : value // return everything else unchanged
+    ));
+}
+
+export { makeGrammarIndex, expandInherits, compileTypes, syntaxErrorMessage, parseOrUndefined, grammarIndexToRuleList, compiledGrammarIndexToRuleList, bigIntContainerToObject }

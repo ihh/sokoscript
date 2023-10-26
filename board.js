@@ -1,6 +1,7 @@
 import * as lookups from './lookups.js';
 import { applyTransformRule, transformRuleUpdate } from './engine.js';
 import { fastLn_leftShift26_max, fastLn_leftShift26 } from './log2.js';
+import { bigIntContainerToObject } from './gramutil.js';
 
 // Time-efficient data structure for storing a set of ints in the range [0,n) where n is a power of 2
 // Uses 2n memory.
@@ -50,6 +51,14 @@ class RangeCounter {
 
 // return random integer in the range [0,max)
 const randomInt = (rng, max) => Number ((BigInt(max) * BigInt(rng.int())) >> BigInt(32));
+const randomBigInt = (rng, max) => {
+    let tmp = max, lg = 32, r = BigInt(rng.int());
+    while (tmp = tmp >> BigInt(32)) {
+        lg += 32;
+        r = (r << BigInt(32)) | BigInt(rng.int());
+    }
+    return (max * r) >> BigInt(lg);
+}
 
 const knuthShuffle = (rng, list) => {
     const len = list.length;
@@ -60,7 +69,9 @@ const knuthShuffle = (rng, list) => {
     return list;
 }
 
-const bigSum = (weights) => weights.reduce ((s, w) => s + w, BigInt(0));
+const bigSum = (...args) => args.reduce ((s, w) => s + w);
+const bigMin = (...args) => args.reduce((m, e) => e < m ? e : m);
+const bigMax = (...args) => args.reduce((m, e) => e > m ? e : m);
 
 class Board {
     constructor (size, grammar, owner, rng) {
@@ -69,7 +80,8 @@ class Board {
         this.owner = owner;
         this.rng = rng;
         this.maxStateLen = 64;
-        this.time = this.lastEventTime = BigInt(0);
+        this.time = BigInt(0);
+        this.lastEventTime = BigInt(0);
         this.cell = new Array(size*size).fill(0).map((_)=>({type:0,state:''}));
         this.byType = new Array(grammar.types.length).fill(0).map((_,n)=>new RangeCounter(size*size,n===0));
         this.byID = {};
@@ -154,46 +166,47 @@ class Board {
 //    and we will also need more than 32 bits of randomness; specifically, if S=2^11, Q=2^10, and M=2^20 then R_max=2^52
 //    so the random number generation will really need to be a BigInt (intermediate value is 104 bits, well more than 64)
 //    NB running at 2^32 ticks/second would be ~4.3GHz which is certainly faster than we can reach!
-//    For many "reasonable" boards (few fast particles), R_max may fit into 32 bits, and randomInt() may need only 64 bits
+//    For many "reasonable" boards (few fast particles), R_max may fit into 32 bits, and randomInt() may need only 64 bits of scratch
 
 //    It is obviously true that if we sacrificed some slower moving particles by setting M=2^10 instead of 2^20 (allowing mHz but not uHz), we'd extend this regime.
 //    EVEN BETTER: set M=1, round all rates up to nearest integer Hz, and implement fractional part by rejection sampling. I think we have a winner!
 
     nextRule (maxWait) {
         const typeRates = this.totalTypeRates();
-        const totalRate = bigSum (typeRates);
+        const totalRate = bigSum (...typeRates);
         if (totalRate == 0)
             return null;
         const r1 = this.rng.int();
-        const wait = Math.max (BigInt(1), BigInt (64 * (fastLn_leftShift26_max - fastLn_leftShift26(r1))) / BigInt(totalRate));
+        const wait = bigMax (BigInt(1), BigInt (64 * (fastLn_leftShift26_max - fastLn_leftShift26(r1))) / BigInt(totalRate));
         if (wait > maxWait)
             return null;
-        const r2 = randomInt (this.rng, totalRate);
-        let type = 0, w;
-        while (r2 >= 0) {
+        const r2 = randomBigInt (this.rng, totalRate);
+        let r = r2, type = 0, w;
+        while (r >= 0) {
             w = typeRates[type];
-            r2 -= w;
+            r -= w;
             ++type;
         }
         --type;
-        r2 += w;
+        r += w;
         const t = this.grammar.rateByType[type];
-        const n = Math.floor (r2 / t);
-        r2 = r2 - n*t;
+        const n = r / t;  // BigInt => rounds down
+        const r2modt = r;
+        r = r - n*t;
         const rules = this.grammar.transform[type];
         let ruleIndex = 0, rule;
-        while (r2 >= 0) {
+        while (r >= 0) {
             rule = rules[ruleIndex];
             w = rule.rate_Hz;
-            r2 -= w;
+            r -= w;
             ++ruleIndex;
         }
         --ruleIndex;
         const r3 = this.rng.int();
         if ((r3 & 0x3fffffff) > rule.acceptProb_leftShift30)
             return null;
-        const dir = Math.floor (r3 >>> 30);
-        const [x,y] = this.index2xy (this.byType[type].kthElement(n));
+        const dir = lookups.dirs[r3 >>> 30];
+        const [x,y] = this.index2xy (this.byType[type].kthElement(Number(n)));
         return { wait, x, y, rule, dir }
     }
 
@@ -250,12 +263,10 @@ class Board {
 
     evolveToTime (t, hardStop) {
         const million = 1000000;
-        const syncPeriods = this.grammar.syncRates.map ((r) => (BigInt(million) << BigInt(32)) / BigInt(r));  // convert from microHz to Hz
-        const syncCategories = syncPeriods.map((_p,n)=>n).reverse();
-        while (this.lastEventTime < t) {
-            const nextSyncTimes = syncPeriods.map ((p) => this.lastEventTime + p - (this.lastEventTime % p));
-            const nextTime = Math.min (t, ...nextSyncTimes);
-            const nextSyncCategories = syncCategories.filter ((n) => nextSyncTimes[n] === nextTime);
+        while (this.time < t) {
+            const nextSyncTimes = this.grammar.syncPeriods.map ((p) => this.lastEventTime + p - (this.lastEventTime % p));
+            const nextTime = bigMin (t, ...nextSyncTimes);
+            const nextSyncCategories = this.grammar.syncCategories.filter ((n) => nextSyncTimes[n] === nextTime);
             const nextTimeIsSyncEvent = nextSyncCategories.length > 0;
             this.evolveAsyncToTime (nextTime, hardStop || nextTimeIsSyncEvent);
             if (nextTimeIsSyncEvent) {
@@ -284,8 +295,8 @@ class Board {
     }
 
     toString() {
-        return JSON.stringify ({ time: this.time,
-                                 lastEventTime: this.lastEventTime,
+        return JSON.stringify ({ time: this.time.toString(),
+                                 lastEventTime: this.lastEventTime.toString(),
                                  mt: this.rng.mt,
                                  types: this.grammar.types,
                                  cell: this.cell.map ((cell) => [cell.type].concat(cell.state || cell.meta ? [cell.state || ''].concat(cell.meta ? [cell.meta] : []) : [])) })
@@ -293,8 +304,8 @@ class Board {
 
     initFromString (str) {
         const json = JSON.parse (str);
-        this.time = json.time;
-        this.lastEventTime = json.lastEventTime;
+        this.time = BigInt (json.time);
+        this.lastEventTime = BigInt (json.lastEventTime);
         this.rng.mt = json.mt;
         if (json.cell.length !== this.cell.length)
             throw new Error ("Tried to load "+json.cell.size()+"-cell board file into "+this.cell.size()+"-cell board");
