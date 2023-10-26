@@ -160,8 +160,8 @@ const compileTypes = (rules) => {
     let command = types.map(()=>({})), key = types.map(()=>({}));
     collectCommandsAndKeys (command, key, transform, types);
     syncRates.forEach ((r, n) => collectCommandsAndKeys (command, key, syncTransform[n], types));
-    const rateByType = transform.map ((rules) => rules.reduce ((total, rule) => total + BigInt(rule.rate_Hz), BigInt(0)));
-    const syncRatesByType = types.map ((_t, n) => syncRates.reduce ((l, _r, m) => l.concat (syncTransform[m][n].length ? [m] : []), []));
+    const rateByType = transform.map ((rules) => rules.reduce ((total, rule) => total + BigInt(rule.rate_Hz), BigInt(0)));  // async rates measured in Hz, with accept probabilities providing microHz resolution
+    const syncRatesByType = types.map ((_t, n) => syncRates.reduce ((l, _r, m) => l.concat (syncTransform[m][n].length ? [m] : []), []));  // sync rates measured in microHz
     const typesBySyncRate = syncRates.map ((_r, m) => types.reduce ((l, _t, n) => l.concat (syncTransform[m][n].length ? [n] : []), []));
     return { transform, syncTransform, types, typeIndex, syncRates, rateByType, syncRatesByType, typesBySyncRate, command, key }
 }
