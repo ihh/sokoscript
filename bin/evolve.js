@@ -5,7 +5,6 @@ import { Board } from '../board.js';
 
 import fs from 'fs';
 import getopt from 'node-getopt';
-import MersenneTwister from 'mersennetwister';
 
 // parse command-line options
 const defaultSeed = 42;
@@ -25,7 +24,7 @@ const text = fs.readFileSync(opt.options.grammar).toString();
 const rules = parseOrUndefined (text, (err) => { console.error(err); process.exit() });
 const grammar = compileTypes (rules || []);
 
-const board = new Board (parseInt(opt.options.size), grammar, opt.options.owner || 'owner', new MersenneTwister (parseInt (opt.options.rnd || defaultSeed)));
+const board = new Board (parseInt(opt.options.size), grammar, opt.options.owner || 'owner', parseInt (opt.options.rnd || defaultSeed));
 if (opt.options.board)
     board.initFromString (fs.readFileSync(opt.options.board).toString());
 

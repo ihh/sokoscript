@@ -2,6 +2,7 @@ import * as lookups from './lookups.js';
 import { applyTransformRule, transformRuleUpdate } from './engine.js';
 import { fastLn_leftShift26_max, fastLn_leftShift26 } from './log2.js';
 import { bigIntContainerToObject } from './gramutil.js';
+import { MersenneTwister } from './MersenneTwister.js';
 
 // Time-efficient data structure for storing a set of ints in the range [0,n) where n is a power of 2
 // Uses 2n memory.
@@ -74,11 +75,11 @@ const bigMin = (...args) => args.reduce((m, e) => e < m ? e : m);
 const bigMax = (...args) => args.reduce((m, e) => e > m ? e : m);
 
 class Board {
-    constructor (size, grammar, owner, rng) {
+    constructor (size, grammar, owner, seed) {
         this.size = size;
         this.grammar = grammar;
         this.owner = owner;
-        this.rng = rng;
+        this.rng = new MersenneTwister (seed || 5489);
         this.maxStateLen = 64;
         this.time = BigInt(0);
         this.lastEventTime = BigInt(0);
@@ -144,7 +145,7 @@ class Board {
 
 // Integer times:
 //    Suppose w is an exponentially distributed rv with mean 1
-//    W = w * F   where F = 2^26  is the value returned by (fastLn_leftShift26_max - fastLn_leftShift26(rng.rnd32()))
+//    W = w * F   where F = 2^26  is the value returned by (fastLn_leftShift26_max - fastLn_leftShift26(rng.int()))
     
 //    r = sum_cells(cell_rate)
 //    R = r * M  is the value returned by an integer encoding of our fixed-point rate values
@@ -237,7 +238,7 @@ class Board {
     }
 
     randomDir() {
-        return lookups.dirs[Math.floor (this.rng.random() * 4)];
+        return lookups.dirs[this.rng.int() % 4];
     }
 
     // if hardStop is true, then there is a concrete event at time t, and we will advance the clock to that point even if nothing happens in the final interval

@@ -33,6 +33,6 @@ const fastLn_leftShift26 = (x) => {
 }
 const fastLn_leftShift26_max = fastLn_leftShift26(0xffffffff) + 1;
 
-// For an exponentially-distributed waiting time with expectation 1, use (fastLn_leftShift26_max - fastLn_leftShift26(rng.rnd32())) >> 26
+// For an exponentially-distributed waiting time with expectation 1, use (fastLn_leftShift26_max - fastLn_leftShift26(rng.int())) / (2**26)
 
 export { fastLg_leftShift26, fastLg_leftShift26_max, fastLn_leftShift26, fastLn_leftShift26_max };
