@@ -87,6 +87,10 @@ class Board {
         this.byID = {};
     }
 
+    timeInSeconds() {
+        return Number(this.time) / 2**32;
+    }
+
     index2xy (index) {
         return [index % this.size, Math.floor (index / this.size)];
     }
@@ -137,10 +141,8 @@ class Board {
     }
 
     // Random waiting time until next event, and selection of next event
-    // Ultimately this could all be integerized for lightning-fast implementation, but that isn't important yet! Premature optimization!
 
-// Sigh....
-
+// Integer times:
 //    Suppose w is an exponentially distributed rv with mean 1
 //    W = w * F   where F = 2^26  is the value returned by (fastLn_leftShift26_max - fastLn_leftShift26(rng.rnd32()))
     
@@ -158,18 +160,15 @@ class Board {
     
 //    Thus, time to next event in ticks = T = tQS^2 = M Q S^2 W / (FR)
     
-//    If we allow for up to Q=2^10, S=2^11 then a tick can be 2^{-32} of a second, QS^2/F=64,
-//     and T = 64 * M * W/R
-//     (we should actually take max(T,1) to ensure every event takes at least one tick)
+//    We allow for up to Q=2^10, S=2^11 by specifying that a tick is 2^{-32} of a second, QS^2/F=64,
+//     and T = 64 * M * W/R     (we further take max(T,1) to ensure every event takes at least one tick)
 
 //    NB actual Q_max is 1000<1024 so r_max < 2^32, however R_max = r_max * M so we do need to store R as a BigInt
-//    and we will also need more than 32 bits of randomness; specifically, if S=2^11, Q=2^10, and M=2^20 then R_max=2^52
+//    and we will sometimes need more than 32 bits of randomness; specifically, if S=2^11, Q=2^10, and M=2^20 then R_max=2^52
 //    so the random number generation will really need to be a BigInt (intermediate value is 104 bits, well more than 64)
-//    NB running at 2^32 ticks/second would be ~4.3GHz which is certainly faster than we can reach!
-//    For many "reasonable" boards (few fast particles), R_max may fit into 32 bits, and randomInt() may need only 64 bits of scratch
 
-//    It is obviously true that if we sacrificed some slower moving particles by setting M=2^10 instead of 2^20 (allowing mHz but not uHz), we'd extend this regime.
-//    EVEN BETTER: set M=1, round all rates up to nearest integer Hz, and implement fractional part by rejection sampling. I think we have a winner!
+//    Given the above concerns we reduce the size of rates as follows:
+//    Set M=1, round all rates up to nearest integer Hz, and implement the fractional part by randomly rejecting some moves.
 
     nextRule (maxWait) {
         const typeRates = this.totalTypeRates();
