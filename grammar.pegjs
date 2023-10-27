@@ -301,7 +301,7 @@ SignedInteger
 
 FixedPoint
  = i:IntegerPart "." f:FractionalPart { return 1000000 * parseInt(i) + parseInt(f) }
- / IntegerPart { return 1000000 * parseInt(i) }
+ / i:IntegerPart { return 1000000 * parseInt(i) }
  / "." f:FractionalPart { return parseInt(f) }
  / ("1000" / "0") { return parseInt(text()) }
 

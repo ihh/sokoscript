@@ -1,4 +1,5 @@
 import * as lookups from './lookups.js';
+import { bigIntContainerToObject } from './gramutil.js';
 
 class Matcher {
     constructor (board, x, y, dir) {

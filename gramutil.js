@@ -65,9 +65,9 @@ const makeGrammarIndex = (rules) => {
     Object.keys(isAncestor).forEach ((ancestor) => descendants[ancestor] = Object.keys(isAncestor[ancestor]).sort())
     let typeIndex = {};
     types.forEach ((type, n) => typeIndex[type] = n);
-    const syncRates = Object.keys(syncTransform).sort ((a,b) => a - b);
-    const syncRatesByType = Object.assign (...[{}].concat (types.map ((t) => ({ [t]: syncRates.filter ((r) => (syncTransform[r][t] || []).length) })).filter ((o) => o[Object.keys(o)[0]].length)));
-    return { transform, syncTransform, ancestors, descendants, types, typeIndex, syncRates, syncRatesByType };
+    const syncRates = Object.keys(syncTransform).map((s)=>parseInt(s)).sort ((a,b) => a - b);
+    const syncCategoriesByType = Object.assign (...[{}].concat (types.map ((t) => ({ [t]: syncRates.filter ((r) => (syncTransform[r][t] || []).length) })).filter ((o) => o[Object.keys(o)[0]].length)));
+    return { transform, syncTransform, ancestors, descendants, types, typeIndex, syncRates, syncCategoriesByType };
 }
 
 const replaceTermWithAlt = (term, descendants) => {
@@ -114,7 +114,7 @@ const expandInherits = (index) => {
     const transform = appendInherited (index.types, explicit, index.ancestors);
     const syncTransform = Object.assign (...[{}].concat(index.syncRates.map ((r) => ({ [r]: appendInherited (index.types, syncExplicit[r], index.ancestors) }))));
 
-    return { types: index.types, typeIndex: index.typeIndex, syncRates: index.syncRates, syncRatesByType: index.syncRatesByType, transform, syncTransform };
+    return { types: index.types, typeIndex: index.typeIndex, syncRates: index.syncRates, syncCategoriesByType: index.syncCategoriesByType, transform, syncTransform };
 };
 
 const compileTerm = (typeIndex, t) => {
@@ -151,7 +151,7 @@ const compileTypes = (rules) => {
     const syncTransform = index.syncRates.map ((r) => compileTransform (index.types, index.syncTransform[r], typeIndex, 'sync', 1));
 
     // convert from microHertz rate to Hertz with rejection
-    const bigMillion = BigInt(million), big2pow30minus1 = BigInt(0x3fffffff);
+    const bigMillion = BigInt(million), big2pow30minus1 = BigInt(0x3fffffff), bigMillion_leftShift32 = bigMillion << BigInt(32);
     transform.forEach ((rules) =>
         rules.forEach ((rule) => {
             rule.rate_Hz = BigInt (Math.ceil (rule.rate / million));
@@ -162,12 +162,12 @@ const compileTypes = (rules) => {
     collectCommandsAndKeys (command, key, transform, types);
     syncRates.forEach ((r, n) => collectCommandsAndKeys (command, key, syncTransform[n], types));
     const rateByType = transform.map ((rules) => rules.reduce ((total, rule) => total + rule.rate_Hz, BigInt(0)));  // async rates measured in Hz, with accept probabilities providing microHz resolution
-    const syncRatesByType = types.map ((_t, n) => syncRates.reduce ((l, _r, m) => l.concat (syncTransform[m][n].length ? [m] : []), []));  // sync rates measured in microHz
-    const typesBySyncRate = syncRates.map ((_r, m) => types.reduce ((l, _t, n) => l.concat (syncTransform[m][n].length ? [n] : []), []));
-    const syncPeriods = syncRates.map ((r) => (BigInt(million) << BigInt(32)) / BigInt(r));  // convert from microHz to Hz
+    const syncCategoriesByType = types.map ((_t, n) => syncRates.reduce ((l, _r, m) => l.concat (syncTransform[m][n].length ? [m] : []), []));  // sync rates measured in microHz
+    const typesBySyncCategory = syncRates.map ((_r, m) => types.reduce ((l, _t, n) => l.concat (syncTransform[m][n].length ? [n] : []), []));
+    const syncPeriods = syncRates.map ((r) => bigMillion_leftShift32 / BigInt(r));  // convert from microHz to Hz
     const syncCategories = syncPeriods.map((_p,n)=>n).reverse();
-
-    return { transform, syncTransform, types, typeIndex, syncRates, syncPeriods, syncCategories, rateByType, syncRatesByType, typesBySyncRate, command, key }
+    
+    return { transform, syncTransform, types, typeIndex, syncRates, syncPeriods, syncCategories, rateByType, syncCategoriesByType, typesBySyncCategory, command, key }
 }
 
 const syntaxErrorMessage = (e, text) => {
@@ -195,8 +195,8 @@ const parseOrUndefined = (text, error) => {
     return rules;
 }
 
-const grammarIndexToRuleList = (index) => index.types.reduce ((newRules,type,n) => newRules.concat([{type:'comment',comment:' Type '+n+': '+type+' ('+(index.transform[type]||[]).length+' rules)'}]).concat(index.transform[type]||[]).concat((index.syncRatesByType[type] || []).reduce((l,s)=>l.concat(index.syncTransform[s][type]),[])), []);
-const compiledGrammarIndexToRuleList = (index) => index.types.reduce ((newRules,type,n) => newRules.concat([{type:'comment',comment:' Type '+n+': '+type+' ('+(index.transform[n]||[]).length+' rules)'}]).concat(index.transform[n]||[]).concat((index.syncRatesByType[n] || []).reduce((l,s)=>l.concat(index.syncTransform[s][n]),[])), []);
+const grammarIndexToRuleList = (index) => index.types.reduce ((newRules,type,n) => newRules.concat([{type:'comment',comment:' Type '+n+': '+type+' ('+(index.transform[type]||[]).length+' rules)'}]).concat(index.transform[type]||[]).concat((index.syncCategoriesByType[type] || []).reduce((l,s)=>l.concat(index.syncTransform[s][type]),[])), []);
+const compiledGrammarIndexToRuleList = (index) => index.types.reduce ((newRules,type,n) => newRules.concat([{type:'comment',comment:' Type '+n+': '+type+' ('+(index.transform[n]||[]).length+' rules)'}]).concat(index.transform[n]||[]).concat((index.syncCategoriesByType[n] || []).reduce((l,s)=>l.concat(index.syncTransform[s][n]),[])), []);
 
 const bigIntContainerToObject = (x) => {
     return JSON.parse(JSON.stringify(x, (key, value) =>

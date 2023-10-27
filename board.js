@@ -271,7 +271,7 @@ class Board {
             this.evolveAsyncToTime (nextTime, hardStop || nextTimeIsSyncEvent);
             if (nextTimeIsSyncEvent) {
                 const updates = knuthShuffle (this.rng, nextSyncCategories.reduce ((l, nSync) =>
-                    l.concat (this.grammar.typesBySyncRate[nSync].reduce ((l, nType) => {
+                    l.concat (this.grammar.typesBySyncCategory[nSync].reduce ((l, nType) => {
                         const rules = this.grammar.syncTransform[nSync][nType];
                         return l.concat (this.byType[nType].elements().reduce ((l, index) => {
                             const xy = this.index2xy(index);
@@ -287,7 +287,7 @@ class Board {
     // evolve board, processing sync rules and messages
     // There is probably no reason to call this with hardStop==true, unless imposing another time limit that is well-defined within the game
     evolveAndProcess (t, messages, hardStop) {
-        messages.toSorted ((a,b) => a.time - b.time).reduce ((message) => {
+        messages.filter ((msg) => msg.time > t).toSorted ((a,b) => a.time - b.time).reduce ((message) => {
             this.evolveToTime (message.time, true);
             this.processMessage (message);
         })
