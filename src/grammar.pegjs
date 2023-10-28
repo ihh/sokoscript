@@ -41,11 +41,6 @@
     return reducePred (rule.parents, isValidAncestor);
   }
 
-  const ruleSubject = (rule) => rule.lhs[0].type;
-  const ruleRate = (rule) => rule.sync || rule.rate || 1;
-  const maxRuleRate = 1000;
-  const validateTotalRates = (rule, rules) => sum ([rule].concat(rules.filter((r)=>ruleSubject(r)===ruleSubject(rule))).map(ruleRate)) <= maxRuleRate;
-
   const countDuplicateAttributes = (attrs) => {
     let count = {};
     attrs.forEach ((attr) => Object.keys(attr).forEach((k) => count[k] = (count[k] || 0) + 1));
@@ -64,7 +59,7 @@
 }
 
 RuleSet
- = r:Rule _ "." _ s:RuleSet &{ return validateInheritance(r,s) } &{ return validateTotalRates(r,s) } { return [r].concat(s) }
+ = r:Rule _ "." _ s:RuleSet &{ return validateInheritance(r,s) } { return [r].concat(s) }
  / r:Rule _ "." _ { return [r] }
  / r:Rule _ { return [r] }
  / c:Comment _ s:RuleSet { return [c].concat (s) }

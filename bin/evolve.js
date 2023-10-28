@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 
-import { compileTypes, parseOrUndefined } from '../gramutil.js';
-import { Board } from '../board.js';
+import { compileTypes, parseOrUndefined } from '../src/gramutil.js';
+import { Board } from '../src/board.js';
 
 import fs from 'fs';
 import getopt from 'node-getopt';

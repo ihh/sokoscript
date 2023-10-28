@@ -1,9 +1,15 @@
 {
   "type": "module",
+  "scripts": {
+    "test": "mocha"
+    },
   "dependencies": {
+    "chai": "^4.3.10",
+    "mocha": "^10.2.0",
+    "save-dev": "^0.0.1-security"
   },
   "devDependencies": {
-    "pegjs": "^0.10.0",
-    "node-getopt": "^0.3.2"
+    "node-getopt": "^0.3.2",
+    "pegjs": "^0.10.0"
   }
 }

@@ -179,8 +179,9 @@ const syntaxErrorMessage = (e, text) => {
               + e.message + "\n"
               + line + "\n"
               + arrow + "\n";
-    } else
-        msg = e.message;
+    } else {
+        msg = e;
+    }
     return msg;
 }
 
@@ -195,8 +196,8 @@ const parseOrUndefined = (text, error) => {
     return rules;
 }
 
-const grammarIndexToRuleList = (index) => index.types.reduce ((newRules,type,n) => newRules.concat([{type:'comment',comment:' Type '+n+': '+type+' ('+(index.transform[type]||[]).length+' rules)'}]).concat(index.transform[type]||[]).concat((index.syncCategoriesByType[type] || []).reduce((l,s)=>l.concat(index.syncTransform[s][type]),[])), []);
-const compiledGrammarIndexToRuleList = (index) => index.types.reduce ((newRules,type,n) => newRules.concat([{type:'comment',comment:' Type '+n+': '+type+' ('+(index.transform[n]||[]).length+' rules)'}]).concat(index.transform[n]||[]).concat((index.syncCategoriesByType[n] || []).reduce((l,s)=>l.concat(index.syncTransform[s][n]),[])), []);
+const grammarIndexToRuleList = (index, addComments) => index.types.reduce ((newRules,type,n) => newRules.concat(addComments ? [{type:'comment',comment:' Type '+n+': '+type+' ('+(index.transform[type]||[]).length+' rules)'}] : []).concat(index.transform[type]||[]).concat((index.syncCategoriesByType[type] || []).reduce((l,s)=>l.concat(index.syncTransform[s][type]),[])), []);
+const compiledGrammarIndexToRuleList = (index, addComments) => index.types.reduce ((newRules,type,n) => newRules.concat(addComments ? [{type:'comment',comment:' Type '+n+': '+type+' ('+(index.transform[n]||[]).length+' rules)'}] : []).concat(index.transform[n]||[]).concat((index.syncCategoriesByType[n] || []).reduce((l,s)=>l.concat(index.syncTransform[s][n]),[])), []);
 
 const bigIntContainerToObject = (x) => {
     return JSON.parse(JSON.stringify(x, (key, value) =>
