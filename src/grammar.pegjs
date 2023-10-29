@@ -41,12 +41,12 @@
     return reducePred (rule.parents, isValidAncestor);
   }
 
-  const countDuplicateAttributes = (attrs) => {
+  const countDuplicateAttributes = (attrs,error) => {
     let count = {};
     attrs.forEach ((attr) => Object.keys(attr).forEach((k) => count[k] = (count[k] || 0) + 1));
     const duplicates = Object.keys(count).filter((k) => count[k] > 1);
     if (duplicates.length)
-      console.warn ("Warning - duplicate attributes: " + duplicates.map((d)=>'"'+d+'"').join(", "));
+      error ("Duplicate attribute: " + duplicates.map((d)=>'"'+d+'"').join(", "));
     return duplicates.length;
   }
 
@@ -86,7 +86,7 @@ Comment
 
 ValidAttributes
  = a:Attributes
- !{ return countDuplicateAttributes(a) }
+ !{ return countDuplicateAttributes(a,error) }
  &{ return validateAttributes(a) }
   { return Object.assign(...a) }
 
@@ -295,8 +295,8 @@ SignedInteger
  / "0"
 
 FixedPoint
- = i:IntegerPart "." f:FractionalPart { return 1000000 * parseInt(i) + parseInt(f) }
- / i:IntegerPart { return 1000000 * parseInt(i) }
+ = i:$IntegerPart "." f:FractionalPart { return 1000000 * parseInt(i) + parseInt(f) }
+ / i:$IntegerPart { return 1000000 * parseInt(i) }
  / "." f:FractionalPart { return parseInt(f) }
  / ("1000" / "0") { return parseInt(text()) }
 

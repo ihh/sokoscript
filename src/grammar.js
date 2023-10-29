@@ -164,7 +164,7 @@ function peg$parse(input, options) {
       peg$c20 = /^[^\n]/,
       peg$c21 = peg$classExpectation(["\n"], true, false),
       peg$c22 = function(c) { return { type: "comment", comment: c.join('') } },
-      peg$c23 = function(a) { return countDuplicateAttributes(a) },
+      peg$c23 = function(a) { return countDuplicateAttributes(a,error) },
       peg$c24 = function(a) { return validateAttributes(a) },
       peg$c25 = function(a) { return Object.assign(...a) },
       peg$c26 = function(first, rest) { return [first].concat(rest.map ((a) => a[1])) },
@@ -4171,7 +4171,13 @@ function peg$parse(input, options) {
     var s0, s1, s2, s3;
 
     s0 = peg$currPos;
-    s1 = peg$parseIntegerPart();
+    s1 = peg$currPos;
+    s2 = peg$parseIntegerPart();
+    if (s2 !== peg$FAILED) {
+      s1 = input.substring(s1, peg$currPos);
+    } else {
+      s1 = s2;
+    }
     if (s1 !== peg$FAILED) {
       if (input.charCodeAt(peg$currPos) === 46) {
         s2 = peg$c0;
@@ -4200,7 +4206,13 @@ function peg$parse(input, options) {
     }
     if (s0 === peg$FAILED) {
       s0 = peg$currPos;
-      s1 = peg$parseIntegerPart();
+      s1 = peg$currPos;
+      s2 = peg$parseIntegerPart();
+      if (s2 !== peg$FAILED) {
+        s1 = input.substring(s1, peg$currPos);
+      } else {
+        s1 = s2;
+      }
       if (s1 !== peg$FAILED) {
         peg$savedPos = s0;
         s1 = peg$c204(s1);
@@ -4846,12 +4858,12 @@ function peg$parse(input, options) {
       return reducePred (rule.parents, isValidAncestor);
     }
 
-    const countDuplicateAttributes = (attrs) => {
+    const countDuplicateAttributes = (attrs,error) => {
       let count = {};
       attrs.forEach ((attr) => Object.keys(attr).forEach((k) => count[k] = (count[k] || 0) + 1));
       const duplicates = Object.keys(count).filter((k) => count[k] > 1);
       if (duplicates.length)
-        console.warn ("Warning - duplicate attributes: " + duplicates.map((d)=>'"'+d+'"').join(", "));
+        error ("Duplicate attribute: " + duplicates.map((d)=>'"'+d+'"').join(", "));
       return duplicates.length;
     }
 

@@ -144,8 +144,9 @@ const makeRhs = (rhs, sep) => {
 const fixedPoint6 = (rate) => {
   let s = Math.floor (rate / 1000000), f = Math.floor (rate % 1000000);
   if (f) {
-    while (f < 100000)
-      f *= 10;
+    f = f.toString();
+    while (f.length < 6)
+      f = '0' + f;
     s = (s + '.' + f).replace(/0+$/g,'');
   }
   return s;
@@ -153,11 +154,11 @@ const fixedPoint6 = (rate) => {
 
 const serialize = (rules) => {
   const attrs = (rule) =>
-    (rule.rate ? (' rate={' + fixedPoint6(rule.rate) + '}') : '')
-    + (rule.sync ? (' sync={' + fixedPoint6(rule.sync) + '}') : '')
+    (rule.rate ? (' rate=' + fixedPoint6(rule.rate)) : '')
+    + (rule.sync ? (' sync=' + fixedPoint6(rule.sync)) : '')
     + (rule.command ? (' command={' + escapeAttr(rule.command) + '}') : '')
     + (rule.key ? (' key={' + escapeAttr(rule.key) + '}') : '')
-    + (rule.reward ? (' reward={' + rule.reward + '}') : '')
+    + (rule.reward ? (' reward=' + rule.reward) : '')
     + (rule.sound ? (' sound={' + escapeAttr(rule.sound) + '}') : '')
     + (rule.caption ? (' caption={' + escapeAttr(rule.caption) + '}') : '');
   return rules.map ((rule) => {
