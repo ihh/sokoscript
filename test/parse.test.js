@@ -12,7 +12,6 @@ const testParse = (grammarText, opts) => {
         consoleErrorFunc = function() { consoleErrorText += Array.from(arguments).map((arg)=>arg.toString()).join('') }
     let rules = parseOrUndefined (grammarText, { error: consoleErrorFunc, suppressLocation: true });
     if (opts.error) {
-        console.error = consoleErrorFunc;
         expect(rules).to.be.undefined;
         if (typeof(opts.error)==='string')
             expect(consoleErrorText).to.equal(opts.error);
