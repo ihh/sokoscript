@@ -17,7 +17,7 @@ const opt = getopt.create([
 
 opt.argv.forEach ((filename) => {
   const text = fs.readFileSync(filename).toString() || '';
-  let rules = parseOrUndefined (text, (err) => { console.error(`File "${filename}":\n`, err); process.exit() });
+  let rules = parseOrUndefined (text, { error: (err) => { console.error(`File "${filename}":\n`, err); process.exit() } });
   if (opt.options.compile) {
     if (opt.options.expand)
       console.warn ("Warning: specifying --expand with --compile is redundant")

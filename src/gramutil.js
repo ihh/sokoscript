@@ -185,13 +185,13 @@ const syntaxErrorMessage = (e, text) => {
     return msg;
 }
 
-const parseOrUndefined = (text, error) => {
+const parseOrUndefined = (text, opts) => {
     let rules;
     try {
         rules = parse(text);
     } catch (e) {
-        if (error !== false)
-            (error || console.error) (syntaxErrorMessage(e,text));
+        if (opts?.error !== false)
+            (opts?.error || console.error) (opts?.suppressLocation ? e.message : syntaxErrorMessage(e,text));
     }
     return rules;
 }

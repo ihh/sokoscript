@@ -21,7 +21,7 @@ const opt = getopt.create([
     .parseSystem() // parse command line
 
 const text = fs.readFileSync(opt.options.grammar).toString();
-const rules = parseOrUndefined (text, (err) => { console.error(err); process.exit() });
+const rules = parseOrUndefined (text, { error: (err) => { console.error(err); process.exit() } });
 const grammar = compileTypes (rules || []);
 
 const board = new Board (parseInt(opt.options.size), grammar, opt.options.owner || 'owner', parseInt (opt.options.rnd || defaultSeed));

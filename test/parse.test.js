@@ -7,12 +7,10 @@ import { stringify } from '../src/canonical-json.js';
 
 const testParse = (grammarText, opts) => {
     opts = opts || {};
-    let consoleErrorFunc, consoleErrorText = '';
-    if (opts.error) {
-        consoleErrorFunc = console.error;
-        console.error = function() { consoleErrorText += Array.from(arguments).map((arg)=>arg.toString()).join('') }
-    }
-    let rules = parseOrUndefined (grammarText, false);
+    let consoleErrorFunc = false, consoleErrorText = '';
+    if (opts.error)
+        consoleErrorFunc = function() { consoleErrorText += Array.from(arguments).map((arg)=>arg.toString()).join('') }
+    let rules = parseOrUndefined (grammarText, { error: consoleErrorFunc, suppressLocation: true });
     if (opts.error) {
         console.error = consoleErrorFunc;
         expect(rules).to.be.undefined;

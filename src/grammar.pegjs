@@ -23,7 +23,7 @@
                                                             { result: true, matchedStateChars: [] }).result;
   const validateRhs = (lhs, rhs) => rhs.reduce ((result, term) => result && reduceAlt (term, (term) => validateState(term,lhs.map(matchedStateChars),false)), true);
 
-  const validateInheritance = (rule, rules) => {
+  const validateInheritance = (rule, rules, error) => {
     if (rule.type === 'transform')
       return true;
     let parents = {}, checked = {};
@@ -33,7 +33,7 @@
         return true;
       checked[p] = true;
       if (p === rule.child) {
-        console.error ("Type '" + rule.child + "' inherits from itself");
+        error ("Type '" + rule.child + "' inherits from itself");
         return false;
       }
       return !parents[p] || reducePred (parents[p], isValidAncestor);
@@ -59,7 +59,7 @@
 }
 
 RuleSet
- = r:Rule _ "." _ s:RuleSet &{ return validateInheritance(r,s) } { return [r].concat(s) }
+ = r:Rule _ "." _ s:RuleSet &{ return validateInheritance(r,s,error) } { return [r].concat(s) }
  / r:Rule _ "." _ { return [r] }
  / r:Rule _ { return [r] }
  / c:Comment _ s:RuleSet { return [c].concat (s) }
