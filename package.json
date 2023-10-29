@@ -1,7 +1,8 @@
 {
   "type": "module",
   "scripts": {
-    "test": "mocha"
+    "test": "mocha",
+    "build-parser": "node -e \"fs.writeFileSync(process.argv[1],require('pegjs').generate(fs.readFileSync(process.argv[2]).toString(),{output:'source',format:'commonjs'}).replace('module.exports =','export').replace(/(?<func>\\\\S+):\\s+(peg\\\\$\\k<func>)/g,(_m,e,f)=>f+' as '+e))\" src/grammar.js src/grammar.pegjs"
     },
   "dependencies": {
     "chai": "^4.3.10",
