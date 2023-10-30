@@ -8,6 +8,8 @@
  * https://gist.github.com/banksean/300494
 */
 
+import { int32ArrayToBase64String, base64StringToInt32Array } from './numberToBase64.js';
+
 const N = 624,
       M = 397,
       UPPER_MASK = 0x80000000,
@@ -41,6 +43,22 @@ class MersenneTwister {
             this.mt[this.mti] >>>= 0;
         }
     };
+
+/** Serialize state
+*/
+
+    toString() {
+        return int32ArrayToBase64String ([this.mti].concat (this.mt));
+    }
+
+/** Deserialize state
+*/
+
+    initFromString(s) {
+        const a = base64StringToInt32Array (s);
+        this.mti = a[0];
+        this.mt = a.slice(1);
+    }
 
 /**
  * Generates a random unsigned 32-bit integer.

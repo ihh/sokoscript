@@ -3,6 +3,7 @@ import { applyTransformRule, transformRuleUpdate } from './engine.js';
 import { fastLn_leftShift26_max, fastLn_leftShift26 } from './log2.js';
 import { bigIntContainerToObject } from './gramutil.js';
 import { MersenneTwister } from './MersenneTwister.js';
+import { stringify } from './canonical-json.js';
 
 // Time-efficient data structure for storing a set of ints in the range [0,n) where n is a power of 2
 // Uses 2n memory.
@@ -295,24 +296,30 @@ class Board {
     }
 
     toString() {
-        return JSON.stringify ({ time: this.time.toString(),
-                                 lastEventTime: this.lastEventTime.toString(),
-                                 mt: this.rng.mt,
-                                 types: this.grammar.types,
-                                 cell: this.cell.map ((cell) => [cell.type].concat(cell.state || cell.meta ? [cell.state || ''].concat(cell.meta ? [cell.meta] : []) : [])) })
+        return stringify ({ time: this.time.toString(),
+                            lastEventTime: this.lastEventTime.toString(),
+                            rng: this.rng.toString(),
+                            types: this.grammar.types,
+                            cell: this.cell.map ((cell) => cell.state || cell.meta ? [cell.type,cell.state || ''].concat(cell.meta ? [cell.meta] : []) : cell.type) })
     }
 
     initFromString (str) {
         const json = JSON.parse (str);
         this.time = BigInt (json.time);
         this.lastEventTime = BigInt (json.lastEventTime);
-        this.rng.mt = json.mt;
+        this.rng.initFromString (json.rng);
         if (json.cell.length !== this.cell.length)
             throw new Error ("Tried to load "+json.cell.size()+"-cell board file into "+this.cell.size()+"-cell board");
         const unknownTypes = json.types.filter ((type) => !(type in this.grammar.typeIndex));
         if (unknownTypes.length)
             throw new Error ("Tried to load board with unknown types: "+unknownTypes.join(' '));
-        json.cell.forEach ((type_state_meta, index) => this.setCellByIndex (index, { type: this.grammar.typeIndex[json.types[type_state_meta[0]]], state: type_state_meta[1] || '', ...(type_state_meta[2] ? {meta:type_state_meta[2]} : {})}));
+        json.cell.forEach ((type_state_meta, index) => {
+            if (typeof(type_state_meta) === 'number')
+                type_state_meta = [type_state_meta];
+            this.setCellByIndex (index, { type: this.grammar.typeIndex[json.types[type_state_meta[0]]],
+                                          state: type_state_meta[1] || '',
+                                          ...(type_state_meta[2] ? {meta:type_state_meta[2]} : {})});
+        });
     }
 
     // TODO
