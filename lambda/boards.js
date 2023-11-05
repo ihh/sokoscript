@@ -15,10 +15,16 @@ const maxTicksBetweenBlocks = BigInt(maxTimeInSecondsBetweenBlocks) * blockTicks
 
 const MaxMoveRetries = 3;
 
+// The conceptual order of tables is clocks->moves->blocks each of which can be owned by users.
+// Each clock defines a board, whose state is updated by moves, whose accumulation is reflected in blocks.
+// Blocks are not guaranteed to be correct (their computations of evolving/modified state are not verified before storage),
+// but they are guaranteed to be consistent with the clock and move tables.
+// Clock tables include various denormalized summaries of moves, including the last move time and the current rules and permissions.
 const userTableName = 'soko-users';
 const clockTableName = 'soko-clocks';
 const moveTableName = 'soko-moves';
 const blockTableName = 'soko-blocks';
+
 
 // Subroutine: get a block from the block table
 const getBlock = async (boardId, blockHash, headerOnly) => {
