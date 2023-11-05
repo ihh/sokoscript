@@ -33,6 +33,7 @@ const getBlock = async (boardId, blockHash, headerOnly) => {
     const block = blockResult.Items[0];
     return { boardId,
              blockHash,
+             blockTime: block.blockTime,
              moveListHash: block.moveListHash,
              confirmations: block.confirmedBy?.length,
              ...(headerOnly ? {} : { confirmedBy: block.confirmedBy,
@@ -62,8 +63,9 @@ const getClockTableEntry = async (boardId) => {
 // Subroutine: get outgoing move list for a block, and indicate whether this move list is complete
 const addOutgoingMovesToBlock = async (block) => {
     const clock = await getClockTableEntry (block.boardId);
-    const lastMoveTime = BigInt(clock.lastMoveTime);
 
+    const blockTime = BigInt (block.blockTime);
+    const lastMoveTime = BigInt(clock.lastMoveTime);
     let maxMoveTime = blockTime + maxTicksBetweenBlocks;  // moves at exactly maxMoveTime are allowed
     let expectedLastMoveTime, blockTimedOut = false;
     if (maxMoveTime > lastMoveTime) {
@@ -126,7 +128,7 @@ const handler = async (event) => {
             break;
 
         case 'POST /boards/{id}/moves':
-            // verify that move fits JSON schema for a move
+            // TODO: verify that move fits JSON schema for a move
             // check that requested time is not out of bounds
             // Retry up to rnd(3)+1 times:
             //  - get clock table entry for board. Check permissions. Set requestedTime=max(requestedTime,lastMoveTime+1)
@@ -144,7 +146,7 @@ const handler = async (event) => {
         }
 
         case 'PUT /boards/{id}/blocks/{hash}':
-            // verify that block fits JSON schema for a block
+            // TODO: verify that block fits JSON schema for a block
             // get clock table entry for board, and verify that board size matches
             // get previous block from block table, and its outgoing moves
             // verify that move list is complete, and that its hash matches the update
