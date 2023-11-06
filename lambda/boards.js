@@ -38,7 +38,7 @@ const stringify = (object) => {
 // This all builds up to our subroutine that hashes a JavaScript object:
 const hash = (obj) => md5(stringify(obj));
 
-// The conceptual order of tables is clocks->moves->blocks each of which can be owned by users.
+// The conceptual hierarchy of tables is clocks->moves->blocks items in each of which can be owned by users.
 // Each clock defines a board, whose state is updated by moves, whose accumulation is reflected in blocks.
 // Blocks are not guaranteed to be correct (their computations of evolving/modified state are not verified before storage),
 // but they are guaranteed to be consistent with the clock and move tables.
