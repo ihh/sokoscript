@@ -52,27 +52,58 @@ const createDynamoDBClient = (endpoint) => {
     return new AWS.DynamoDB.DocumentClient();
 };
 
+// Subroutine: create AWS dynamoDB instance for given (or default) endpoint
+const createDynamoDB = (endpoint) => {
+    const AWS = require('aws-sdk');
+    if (endpoint)
+        AWS.config.update({endpoint: endpoint});
+    return new AWS.DynamoDB();
+};
+
+// Subroutine: delete clock, move, and block tables
+const deleteTables = async (endpoint) => {
+    if (endpoint) {  // refuse to do this unless endpoint is specified
+        const dynamoDB = createDynamoDB (endpoint);
+        const clockTableParams = { TableName: clockTableName };
+        const moveTableParams = { TableName: moveTableName };
+        const blockTableParams = { TableName: blockTableName };
+        let clockTable = dynamoDB.deleteTable(clockTableParams).promise();
+        let moveTable = dynamoDB.deleteTable(moveTableParams).promise();
+        let blockTable = dynamoDB.deleteTable(blockTableParams).promise();
+        const clockResult = await clockTable;
+        const moveResult = await moveTable;
+        const blockResult = await blockTable;
+        return { clockResult, moveResult, blockResult };
+    }
+};
+
 // Subroutine: create clock, move, and block tables
 const createTables = async (endpoint) => {
-    const dynamoDB = createDynamoDBClient (endpoint);
+    const dynamoDB = createDynamoDB (endpoint);
     const clockTableParams = {
         TableName: clockTableName,
         KeySchema: [
             { AttributeName: 'boardId', KeyType: 'HASH' }
         ],
         AttributeDefinitions: [
-            { AttributeName: 'boardId', AttributeType: 'S' }
+            { AttributeName: 'boardId', AttributeType: 'S' },
+            { AttributeName: 'boardOwner', AttributeType: 'S' },
+            { AttributeName: 'lastMoveTime', AttributeType: 'N' },
         ],
         GlobalSecondaryIndexes: [
             {
-                IndexName: 'owner-lastMoveTime-index',
+                IndexName: 'boardOwner-lastMoveTime-index',
                 KeySchema: [
-                    { AttributeName: 'owner', KeyType: 'HASH' },
+                    { AttributeName: 'boardOwner', KeyType: 'HASH' },
                     { AttributeName: 'lastMoveTime', KeyType: 'RANGE' }
                 ],
                 Projection: {
                     ProjectionType: 'ALL'
                 },
+                ProvisionedThroughput: {
+                    ReadCapacityUnits: 1,
+                    WriteCapacityUnits: 1
+                }
             }
         ],
         ProvisionedThroughput: {
@@ -88,7 +119,7 @@ const createTables = async (endpoint) => {
         ],
         AttributeDefinitions: [
             { AttributeName: 'boardId', AttributeType: 'S' },
-            { AttributeName: 'moveTime', AttributeType: 'N' }
+            { AttributeName: 'moveTime', AttributeType: 'N' },
         ],
         ProvisionedThroughput: {
             ReadCapacityUnits: 1,
@@ -103,7 +134,9 @@ const createTables = async (endpoint) => {
         ],
         AttributeDefinitions: [
             { AttributeName: 'boardId', AttributeType: 'S' },
-            { AttributeName: 'blockHash', AttributeType: 'S' }
+            { AttributeName: 'blockHash', AttributeType: 'S' },
+            { AttributeName: 'blockTime', AttributeType: 'N' },
+            { AttributeName: 'previousBlockHash', AttributeType: 'S' },
         ],
         LocalSecondaryIndexes: [
             {
@@ -122,6 +155,9 @@ const createTables = async (endpoint) => {
                     { AttributeName: 'boardId', KeyType: 'HASH' },
                     { AttributeName: 'previousBlockHash', KeyType: 'RANGE' }
                 ],
+                Projection: {
+                    ProjectionType: 'KEYS_ONLY'
+                },
             }
         ],
         ProvisionedThroughput: {
@@ -194,7 +230,7 @@ const addOutgoingMovesToBlock = async (dynamoDB, block) => {
     let maxMoveTime = blockTime + MaxTicksBetweenBlocks;  // moves at exactly maxMoveTime are allowed
     let expectedLastMoveTime, blockTimedOut = false;
     if (maxMoveTime > lastMoveTime) {
-        maxMoveTime = lastMoveTime;  // avoid retrieving moves that weren't yet reflected in the clock table, to avoid compromising our movelist completeness call
+        maxMoveTime = lastMoveTime;  // avoid retrieving moves that weren't yet reflected in the clock table when we queried it
         expectedLastMoveTime = lastMoveTime.toString();
     } else  // lastMoveTime >= maxMoveTime
         blockTimedOut = true;
@@ -278,12 +314,12 @@ const makeHandlerForEndpoint = (endpoint) => {
                     TableName: clockTableName,
                     Key: { boardId: id },
                     ConditionExpression: 'attribute_not_exists(boardId)',
-                    UpdateExpression: 'set owner=:owner, boardSize=:boardSize, rootBlockHash=:rootBlockHash, rootBlock=:rootBlock, lastMoveTime=:lastMoveTime',
+                    UpdateExpression: 'set boardOwner=:owner, boardSize=:boardSize, rootBlockHash=:rootBlockHash, rootBlock=:rootBlock, lastMoveTime=:lastMoveTime',
                     ExpressionAttributeValues: {
                         ':owner': callerId,
                         ':boardSize': boardSize,
                         ':rootBlockHash': rootBlockHash,
-                        ':rootBlock': rootBlock,
+                        ':rootBlock': stringify(rootBlock),
                         ':lastMoveTime': time.toString()
                     }
                 };
@@ -321,8 +357,8 @@ const makeHandlerForEndpoint = (endpoint) => {
                 // query the clock table for all boards using optional query parameter filter (owner=), sorted by lastMoveTime (most recent first)
                 const clockQueryParams = {
                     TableName: clockTableName,
-                    IndexName: 'owner-lastMoveTime-index',
-                    KeyConditionExpression: 'owner = :owner',
+                    IndexName: 'boardOwner-lastMoveTime-index',
+                    KeyConditionExpression: 'boardOwner = :owner',
                     ExpressionAttributeValues: {
                         ':owner': callerId
                     },
@@ -343,7 +379,7 @@ const makeHandlerForEndpoint = (endpoint) => {
                 const clockDeleteParams = {
                     TableName: clockTableName,
                     Key: { boardId: event.pathParameters?.id },
-                    ConditionExpression: 'owner = :owner',
+                    ConditionExpression: 'boardOwner = :owner',
                     ExpressionAttributeValues: {
                         ':owner': callerId
                     }
@@ -428,10 +464,10 @@ const makeHandlerForEndpoint = (endpoint) => {
                         TableName: moveTableName,
                         Key: { boardId: event.pathParameters?.id, moveTime: requestedBoardTime.toString() },
                         ConditionExpression: 'attribute_not_exists(boardId)',
-                        UpdateExpression: 'set owner=:owner, originallyRequestedTime=:originallyRequestedTime',
+                        UpdateExpression: 'set mover=:caller, origTime=:originallyRequestedTime',
                         ExpressionAttributeValues: {
-                            ':owner': callerId,
-                            ':originallyRequestedTime': originallyRequestedBoardTime.toString()
+                            ':caller': callerId,
+                            ':origTime': originallyRequestedUnixTime
                         }
                     };
                     for (let moveRetry = 0; !newMove && moveRetry < MaxMoveTableRetries; ++moveRetry) {
@@ -596,4 +632,4 @@ const makeHandlerForEndpoint = (endpoint) => {
 };
 const handler = makeHandlerForEndpoint();
 
-module.exports = { handler, makeHandlerForEndpoint, createTables };
+module.exports = { handler, makeHandlerForEndpoint, createTables, deleteTables };
