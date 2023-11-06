@@ -284,8 +284,8 @@ const handler = async (event) => {
         case 'POST /boards/{id}/moves': {
             // move time is specified in milliseconds since epoch
             const requestedUnixTime = parseInt (event.body?.time);
-            const originallyRequestedUnixTime = requestedTime;
-            let requestedBoardTime = BigInt(requestedTime) * BlockTicksPerSecond / 1000n;
+            const originallyRequestedUnixTime = requestedUnixTime;
+            let requestedBoardTime = BigInt(requestedUnixTime) * BlockTicksPerSecond / 1000n;
             // TODO: verify that move fits JSON schema for a move
             // Retry up to rnd(MaxMoveRetries) times:
             const moveRetries = Math.floor(Math.random()*MaxMoveRetries);
