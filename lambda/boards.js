@@ -30,7 +30,7 @@ const copyObjectWithSortedKeys = (object) => {
     else
       return object
   }
-  
+
 const stringify = (object) => {
     return JSON.stringify(copyObjectWithSortedKeys(object))
 }
@@ -247,7 +247,7 @@ const handler = async (event) => {
             };
             let clockDeleteResult = await dynamoDB.delete(clockDeleteParams).promise();
             clockDeleteResult.then ((result) => {
-                // if successful: delete all block and move table entries for this board ID
+                // following successful clock table deletion: delete all block and move table entries for this board ID
                 const blockDeleteParams = {
                     TableName: blockTableName,
                     KeyConditionExpression: 'boardId = :id',
