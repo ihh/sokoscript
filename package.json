@@ -3,13 +3,13 @@
   "scripts": {
     "test": "mocha",
     "build-parser": "node -e \"fs.writeFileSync(process.argv[1],require('pegjs').generate(fs.readFileSync(process.argv[2]).toString(),{output:'source',format:'commonjs'}).replace('module.exports =','export').replace(/(?<func>\\\\S+):\\s+(peg\\\\$\\k<func>)/g,(_m,e,f)=>f+' as '+e))\" src/grammar.js src/grammar.pegjs"
-    },
-  "dependencies": {
   },
   "devDependencies": {
-    "node-getopt": "^0.3.2",
-    "pegjs": "^0.10.0",
     "chai": "^4.3.10",
-    "mocha": "^10.2.0"
+    "express": "^4.18.2",
+    "mocha": "^10.2.0",
+    "node": "^21.1.0",
+    "node-getopt": "^0.3.2",
+    "pegjs": "^0.10.0"
   }
 }

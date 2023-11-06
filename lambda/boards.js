@@ -1,6 +1,3 @@
-const AWS = require('aws-sdk');
-const dynamoDB = new AWS.DynamoDB.DocumentClient();
-
 // Global parameters
 const MaxOutgoingMovesForBlock = 100;
 const MaxTimeInSecondsBetweenBlocks = 600;
@@ -12,7 +9,16 @@ const BlockTicksPerSecond = BigInt(Math.pow(2,32));
 const MaxTicksBetweenBlocks = BigInt(MaxTimeInSecondsBetweenBlocks) * BlockTicksPerSecond;
 
 const MaxMoveRetries = 3;
-const MaxMoveTableRetries = 10
+const MaxMoveTableRetries = 10;
+
+// The conceptual hierarchy of tables is clocks->moves->blocks items in each of which can be owned by users.
+// Each clock defines a board, whose state is updated by moves, whose accumulation is reflected in blocks.
+// Blocks are not guaranteed to be correct (their computations of evolving/modified state are not verified before storage),
+// but they are guaranteed to be consistent with the clock and move tables.
+// Clock tables include various denormalized summaries of moves, including the last move time and the current rules and permissions.
+const clockTableName = 'soko-clocks';
+const moveTableName = 'soko-moves';
+const blockTableName = 'soko-blocks';
 
 // MD5 hash function: https://github.com/jbt/tiny-hashes/blob/b0ee6142d046c1c2987a0120ea9cf51c28d957dd/md5-min.js
 const md5 = function(){for(var m=[],l=0;64>l;)m[l]=0|4294967296*Math.abs(Math.sin(++l));return function(c){var e,g,f,a,h=[];c=unescape(encodeURI(c));for(var b=c.length,k=[e=1732584193,g=-271733879,~e,~g],d=0;d<=b;)h[d>>2]|=(c.charCodeAt(d)||128)<<8*(d++%4);h[c=16*(b+8>>6)+14]=8*b;for(d=0;d<c;d+=16){b=k;for(a=0;64>a;)b=[f=b[3],(e=b[1]|0)+((f=b[0]+[e&(g=b[2])|~e&f,f&e|~f&g,e^g^f,g^(e|~f)][b=a>>4]+(m[a]+(h[[a,5*a+1,3*a+5,7*a][b]%16+d]|0)))<<(b=[7,12,17,22,5,9,14,20,4,11,16,23,6,10,15,21][4*b+a++%4])|f>>>32-b),e,g];for(a=4;a;)k[--a]=k[a]+b[a]}for(c="";32>a;)c+=(k[a>>3]>>4*(1^a++&7)&15).toString(16);return c}}();
@@ -38,17 +44,101 @@ const stringify = (object) => {
 // This all builds up to our subroutine that hashes a JavaScript object:
 const hash = (obj) => md5(stringify(obj));
 
-// The conceptual hierarchy of tables is clocks->moves->blocks items in each of which can be owned by users.
-// Each clock defines a board, whose state is updated by moves, whose accumulation is reflected in blocks.
-// Blocks are not guaranteed to be correct (their computations of evolving/modified state are not verified before storage),
-// but they are guaranteed to be consistent with the clock and move tables.
-// Clock tables include various denormalized summaries of moves, including the last move time and the current rules and permissions.
-const clockTableName = 'soko-clocks';
-const moveTableName = 'soko-moves';
-const blockTableName = 'soko-blocks';
+// Subroutine: create AWS dynamoDB client for given (or default) endpoint
+const createDynamoDBClient = (endpoint) => {
+    const AWS = require('aws-sdk');
+    if (endpoint)
+        AWS.config.update({endpoint: endpoint});
+    return new AWS.DynamoDB.DocumentClient();
+};
+
+// Subroutine: create clock, move, and block tables
+const createTables = async (endpoint) => {
+    const dynamoDB = createDynamoDBClient (endpoint);
+    const clockTableParams = {
+        TableName: clockTableName,
+        KeySchema: [
+            { AttributeName: 'boardId', KeyType: 'HASH' }
+        ],
+        AttributeDefinitions: [
+            { AttributeName: 'boardId', AttributeType: 'S' }
+        ],
+        GlobalSecondaryIndexes: [
+            {
+                IndexName: 'owner-lastMoveTime-index',
+                KeySchema: [
+                    { AttributeName: 'owner', KeyType: 'HASH' },
+                    { AttributeName: 'lastMoveTime', KeyType: 'RANGE' }
+                ],
+                Projection: {
+                    ProjectionType: 'ALL'
+                },
+            }
+        ],
+        ProvisionedThroughput: {
+            ReadCapacityUnits: 1,
+            WriteCapacityUnits: 1
+        }
+    };
+    const moveTableParams = {
+        TableName: moveTableName,
+        KeySchema: [
+            { AttributeName: 'boardId', KeyType: 'HASH' },
+            { AttributeName: 'moveTime', KeyType: 'RANGE' }
+        ],
+        AttributeDefinitions: [
+            { AttributeName: 'boardId', AttributeType: 'S' },
+            { AttributeName: 'moveTime', AttributeType: 'N' }
+        ],
+        ProvisionedThroughput: {
+            ReadCapacityUnits: 1,
+            WriteCapacityUnits: 1
+        }
+    };
+    const blockTableParams = {
+        TableName: blockTableName,
+        KeySchema: [
+            { AttributeName: 'boardId', KeyType: 'HASH' },
+            { AttributeName: 'blockHash', KeyType: 'RANGE' }
+        ],
+        AttributeDefinitions: [
+            { AttributeName: 'boardId', AttributeType: 'S' },
+            { AttributeName: 'blockHash', AttributeType: 'S' }
+        ],
+        LocalSecondaryIndexes: [
+            {
+                IndexName: 'boardId-blockTime-index',
+                KeySchema: [
+                    { AttributeName: 'boardId', KeyType: 'HASH' },
+                    { AttributeName: 'blockTime', KeyType: 'RANGE' }
+                ],
+                Projection: {
+                    ProjectionType: 'ALL'
+                },
+            },
+            {
+                IndexName: 'boardId-previousBlockHash-index',
+                KeySchema: [
+                    { AttributeName: 'boardId', KeyType: 'HASH' },
+                    { AttributeName: 'previousBlockHash', KeyType: 'RANGE' }
+                ],
+            }
+        ],
+        ProvisionedThroughput: {
+            ReadCapacityUnits: 1,
+            WriteCapacityUnits: 1
+        }
+    };
+    let clockTable = dynamoDB.createTable(clockTableParams).promise();
+    let moveTable = dynamoDB.createTable(moveTableParams).promise();
+    let blockTable = dynamoDB.createTable(blockTableParams).promise();
+    await clockTable;
+    await moveTable;
+    await blockTable;
+};
 
 // Subroutine: get a block from the block table
-const getBlock = async (boardId, blockHash, headerOnly) => {
+const getBlock = async (dynamoDB, boardId, blockHash, headerOnly) => {
     const blockQueryParams = {
         TableName: blockTableName,
         KeyConditionExpression: '#id = :id and #hash = :hash',
@@ -76,7 +166,7 @@ const getBlock = async (boardId, blockHash, headerOnly) => {
 };
 
 // Subroutine: get clock table entry for a board
-const getClockTableEntry = async (boardId) => {
+const getClockTableEntry = async (dynamoDB, boardId) => {
     const clockQueryParams = {
         TableName: clockTableName,
         KeyConditionExpression: '#id = :id',
@@ -96,8 +186,8 @@ const getClockTableEntry = async (boardId) => {
 };
 
 // Subroutine: get outgoing move list for a block, and indicate whether this move list is complete
-const addOutgoingMovesToBlock = async (block) => {
-    const clock = await getClockTableEntry (block.boardId);
+const addOutgoingMovesToBlock = async (dynamoDB, block) => {
+    const clock = await getClockTableEntry (dynamoDB, block.boardId);
 
     const blockTime = BigInt (block.blockTime);
     const lastMoveTime = BigInt(clock.lastMoveTime);
@@ -135,10 +225,10 @@ const addOutgoingMovesToBlock = async (block) => {
 };
 
 // Subroutine: get a block and (if headerOnly is not true) its outgoing move list
-const getBlockAndOutgoingMoves = async (boardId, blockHash, headerOnly) => {
-    let block = await getBlock (boardId, blockHash, headerOnly);
+const getBlockAndOutgoingMoves = async (dynamoDB, boardId, blockHash, headerOnly) => {
+    let block = await getBlock (dynamoDB, boardId, blockHash, headerOnly);
     if (!headerOnly)
-        block = await addOutgoingMovesToBlock (block);
+        block = await addOutgoingMovesToBlock (dynamoDB, block);
     return block;
 }
 
@@ -158,347 +248,352 @@ const makeBlockTableEntry = (args) => {
     };
 };
 
-const handler = async (event) => {
-    const routeKey = event.httpMethod + ' ' + event.resource;
-    const callerId = event.requestContext?.identity?.cognitoIdentityId;
-            
-    switch (routeKey) {
-        case 'POST /boards':
-            // create a random board ID
-            const idNum = Math.floor(Math.random()*Math.pow(2,32));
-            const id = idNum.toString(32);
-            const time = BigInt(Date.now()) * BlockTicksPerSecond / 1000n;
-            const boardSize = parseInt (event.body?.boardSize);
-            // check that boardSize is a power of 2
-            if (boardSize & (boardSize - 1))
-                return {
-                    statusCode: 400,
-                    body: JSON.stringify({ message: 'Board size must be a power of 2' }),
-                };
-            // create the root block, and get the hash of it, but don't store it in the block table yet
-            const boardState = makeBoardState ({ board: { time: time.toString,
-                                                          lastEventTime: time.toString(),
-                                                          seed: idNum } });
-            const rootBlock = makeBlockTableEntry ({ boardTime: time, boardState });
-            const rootBlockHash = hash(rootBlock);
-            // create a clock table entry with this board ID, owned by caller, with lastMoveTime=now, conditional on none existing
-            const clockUpdateParams = {
-                TableName: clockTableName,
-                Key: { boardId: id },
-                ConditionExpression: 'attribute_not_exists(boardId)',
-                UpdateExpression: 'set owner=:owner, boardSize=:boardSize, rootBlockHash=:rootBlockHash, rootBlock=:rootBlock, lastMoveTime=:lastMoveTime',
-                ExpressionAttributeValues: {
-                    ':owner': callerId,
-                    ':boardSize': boardSize,
-                    ':rootBlockHash': rootBlockHash,
-                    ':rootBlock': rootBlock,
-                    ':lastMoveTime': time.toString()
-                }
-            };
-            let clockUpdate = dynamoDB.update(clockUpdateParams).promise();
-            let clockResult = await clockUpdate;
-            if (!clockResult)
-                throw new Error ('Clock update failed');
-            // now create the root entry in the block table
-            const blockUpdateParams = {
-                TableName: blockTableName,
-                Key: { boardId: id, blockHash: rootBlockHash },
-                ConditionExpression: 'attribute_not_exists(boardId)',
-                UpdateExpression: 'set first=:firstClaimant, claimants=:claimants, predecessors=:predecessors, boardTime=:boardTime, block=:block',
-                ExpressionAttributeValues: {
-                    ':blockTime': time.toString(),
-                    ':block': rootBlock,
-                    ':predecessors': 0,
-                    ':firstClaimant': callerId,
-                    ':claimants': [callerId]
-                }
-            };
-            let blockUpdate = dynamoDB.update(blockUpdateParams).promise();
-            let blockResult = await blockUpdate;
-            if (!(blockResult?.Items?.length === 1))
-                throw new Error ('Block update failed');
-            // return the board ID
-            return {
-                statusCode: 200,
-                body: JSON.stringify({ message: 'Board created', id }),
-            };
-            break;
+const makeHandlerForEndpoint = (endpoint) => {
+    const handler = async (event) => {
+        const routeKey = event.httpMethod + ' ' + event.resource;
+        const callerId = event.requestContext?.identity?.cognitoIdentityId;
+        const dynamoDB = createDynamoDBClient (endpoint);
 
-        case 'GET /boards': {
-            // query the clock table for all boards using optional query parameter filter (owner=), sorted by lastMoveTime (most recent first)
-            const clockQueryParams = {
-                TableName: clockTableName,
-                IndexName: 'owner-lastMoveTime-index',
-                KeyConditionExpression: 'owner = :owner',
-                ExpressionAttributeValues: {
-                    ':owner': callerId
-                },
-                ScanIndexForward: false
-            }; 
-            const clockQueryResult = await dynamoDB.query(clockQueryParams).promise();  
-            const clocks = clockQueryResult.Items || [];
-            // return the board IDs
-            return {
-                statusCode: 200,
-                body: JSON.stringify({ message: 'Boards retrieved', boards: clocks.map((clock)=>clock.boardId) }),
-            };
-            break;
-        }
-
-        case 'DELETE /boards/{id}': {
-            // delete the clock table entry for this board ID, conditional on owner matching caller ID
-            const clockDeleteParams = {
-                TableName: clockTableName,
-                Key: { boardId: event.pathParameters?.id },
-                ConditionExpression: 'owner = :owner',
-                ExpressionAttributeValues: {
-                    ':owner': callerId
-                }
-            };
-            let clockDeleteResult = await dynamoDB.delete(clockDeleteParams).promise();
-            clockDeleteResult.then ((result) => {
-                // following successful clock table deletion: delete all block and move table entries for this board ID
-                const blockDeleteParams = {
-                    TableName: blockTableName,
-                    KeyConditionExpression: 'boardId = :id',
+        switch (routeKey) {
+            case 'POST /boards':
+                // create a random board ID
+                const idNum = Math.floor(Math.random()*Math.pow(2,32));
+                const id = idNum.toString(32);
+                const time = BigInt(Date.now()) * BlockTicksPerSecond / 1000n;
+                const boardSize = parseInt (event.body?.boardSize);
+                // check that boardSize is a power of 2
+                if (boardSize & (boardSize - 1))
+                    return {
+                        statusCode: 400,
+                        body: JSON.stringify({ message: 'Board size must be a power of 2' }),
+                    };
+                // create the root block, and get the hash of it, but don't store it in the block table yet
+                const boardState = makeBoardState ({ board: { time: time.toString,
+                                                            lastEventTime: time.toString(),
+                                                            seed: idNum } });
+                const rootBlock = makeBlockTableEntry ({ boardTime: time, boardState });
+                const rootBlockHash = hash(rootBlock);
+                // create a clock table entry with this board ID, owned by caller, with lastMoveTime=now, conditional on none existing
+                const clockUpdateParams = {
+                    TableName: clockTableName,
+                    Key: { boardId: id },
+                    ConditionExpression: 'attribute_not_exists(boardId)',
+                    UpdateExpression: 'set owner=:owner, boardSize=:boardSize, rootBlockHash=:rootBlockHash, rootBlock=:rootBlock, lastMoveTime=:lastMoveTime',
                     ExpressionAttributeValues: {
-                        ':id': event.pathParameters?.id
+                        ':owner': callerId,
+                        ':boardSize': boardSize,
+                        ':rootBlockHash': rootBlockHash,
+                        ':rootBlock': rootBlock,
+                        ':lastMoveTime': time.toString()
                     }
                 };
-                let blockDelete = dynamoDB.query(blockDeleteParams).promise();
-                blockDelete.then ((result) => {
-                    const moveDeleteParams = {
-                        TableName: moveTableName,
+                let clockUpdate = dynamoDB.update(clockUpdateParams).promise();
+                let clockResult = await clockUpdate;
+                if (!clockResult)
+                    throw new Error ('Clock update failed');
+                // now create the root entry in the block table
+                const blockUpdateParams = {
+                    TableName: blockTableName,
+                    Key: { boardId: id, blockHash: rootBlockHash },
+                    ConditionExpression: 'attribute_not_exists(boardId)',
+                    UpdateExpression: 'set first=:firstClaimant, claimants=:claimants, predecessors=:predecessors, boardTime=:boardTime, block=:block',
+                    ExpressionAttributeValues: {
+                        ':blockTime': time.toString(),
+                        ':block': rootBlock,
+                        ':previousBlockHash': hash({boardId}),
+                        ':predecessors': 0,
+                        ':firstClaimant': callerId,
+                        ':claimants': [callerId]
+                    }
+                };
+                let blockUpdate = dynamoDB.update(blockUpdateParams).promise();
+                let blockResult = await blockUpdate;
+                if (!(blockResult?.Items?.length === 1))
+                    throw new Error ('Block update failed');
+                // return the board ID
+                return {
+                    statusCode: 200,
+                    body: JSON.stringify({ message: 'Board created', id }),
+                };
+                break;
+
+            case 'GET /boards': {
+                // query the clock table for all boards using optional query parameter filter (owner=), sorted by lastMoveTime (most recent first)
+                const clockQueryParams = {
+                    TableName: clockTableName,
+                    IndexName: 'owner-lastMoveTime-index',
+                    KeyConditionExpression: 'owner = :owner',
+                    ExpressionAttributeValues: {
+                        ':owner': callerId
+                    },
+                    ScanIndexForward: false
+                }; 
+                const clockQueryResult = await dynamoDB.query(clockQueryParams).promise();  
+                const clocks = clockQueryResult.Items || [];
+                // return the board IDs
+                return {
+                    statusCode: 200,
+                    body: JSON.stringify({ message: 'Boards retrieved', boards: clocks.map((clock)=>clock.boardId) }),
+                };
+                break;
+            }
+
+            case 'DELETE /boards/{id}': {
+                // delete the clock table entry for this board ID, conditional on owner matching caller ID
+                const clockDeleteParams = {
+                    TableName: clockTableName,
+                    Key: { boardId: event.pathParameters?.id },
+                    ConditionExpression: 'owner = :owner',
+                    ExpressionAttributeValues: {
+                        ':owner': callerId
+                    }
+                };
+                let clockDeleteResult = await dynamoDB.delete(clockDeleteParams).promise();
+                clockDeleteResult.then ((result) => {
+                    // following successful clock table deletion: delete all block and move table entries for this board ID
+                    const blockDeleteParams = {
+                        TableName: blockTableName,
                         KeyConditionExpression: 'boardId = :id',
                         ExpressionAttributeValues: {
                             ':id': event.pathParameters?.id
                         }
                     };
-                    let moveDelete = dynamoDB.query(moveDeleteParams).promise();
-                    moveDelete.then ((result) => {
-                        // return success
-                        return {
-                            statusCode: 200,
-                            body: JSON.stringify({ message: 'Board deleted' }),
+                    let blockDelete = dynamoDB.query(blockDeleteParams).promise();
+                    blockDelete.then ((result) => {
+                        const moveDeleteParams = {
+                            TableName: moveTableName,
+                            KeyConditionExpression: 'boardId = :id',
+                            ExpressionAttributeValues: {
+                                ':id': event.pathParameters?.id
+                            }
                         };
+                        let moveDelete = dynamoDB.query(moveDeleteParams).promise();
+                        moveDelete.then ((result) => {
+                            // return success
+                            return {
+                                statusCode: 200,
+                                body: JSON.stringify({ message: 'Board deleted' }),
+                            };
+                        });
                     });
-                });
-            })
-            // if unsuccessful: return an error
-            return {
-                statusCode: 400,
-                body: JSON.stringify({ message: 'Board deletion failed' }),
-            };
-        }
-
-        case 'POST /boards/{id}/moves': {
-            // move time is specified in milliseconds since epoch
-            const requestedUnixTime = parseInt (event.body?.time);
-            const originallyRequestedUnixTime = requestedUnixTime;
-            let requestedBoardTime = BigInt(requestedTime) * BlockTicksPerSecond / 1000n;
-            // TODO: verify that move fits JSON schema for a move
-            // Retry up to rnd(MaxMoveRetries) times:
-            const moveRetries = Math.floor(Math.random()*MaxMoveRetries);
-            let retry = 0, newClock = false, newMove = false;
-            for (retry = 0; retry <= moveRetries && !newClock; ++retry) {
-                const currentTimeOnServer = Date.now();
-                //  - check that originallyRequestedTime - maxMoveAnticipation <= currentTimeOnServer <= originallyRequestedTime + maxMoveDelay
-                //    if it isn't, return an error
-                if (!(originallyRequestedUnixTime - MaxMoveAnticipationMillisecs <= currentTimeOnServer <= originallyRequestedUnixTime + MaxMoveDelayMillisecs))
-                    return {
-                        statusCode: 400,
-                        body: JSON.stringify({ message: 'Move time out of range' }),
-                    };
-                //  - retrieve clock table entry for board. Check permissions. Set requestedTime=max(requestedTime,lastMoveTimeRetrieved+1)
-                let clock = await getClockTableEntry (event.pathParameters?.id);
-                // TODO: check permissions
-                requestedBoardTime = Math.max (requestedBoardTime, clock.lastMoveTime + 1);
-                //  - update clock table with requested time, conditional on lastMoveTime=lastMoveTimeRetrieved
-                const clockUpdateParams = {
-                    TableName: clockTableName,
-                    Key: { boardId: event.pathParameters?.id },
-                    ConditionExpression: 'lastMoveTime = :lastMoveTime',
-                    UpdateExpression: 'set lastMoveTime=:requestedTime',
-                    ExpressionAttributeValues: {
-                        ':requestedTime': requestedBoardTime.toString(),
-                        ':lastMoveTime': clock.lastMoveTime.toString()
-                    }
+                })
+                // if unsuccessful: return an error
+                return {
+                    statusCode: 400,
+                    body: JSON.stringify({ message: 'Board deletion failed' }),
                 };
-                clockUpdate = await dynamoDB.update(clockUpdateParams).promise();
-                if (clockUpdate?.Items?.length === 1)
-                    newClock = clockUpdate.Items[0];
-            }
-            // if clock table update succeeded...
-            if (newClock) {
-                //  - create a move table entry with this board ID, requestedTime, and originallyRequestedTime, attributed to caller
-                const moveUpdateParams = {
-                    TableName: moveTableName,
-                    Key: { boardId: event.pathParameters?.id, moveTime: requestedBoardTime.toString() },
-                    ConditionExpression: 'attribute_not_exists(boardId)',
-                    UpdateExpression: 'set owner=:owner, originallyRequestedTime=:originallyRequestedTime',
-                    ExpressionAttributeValues: {
-                        ':owner': callerId,
-                        ':originallyRequestedTime': originallyRequestedBoardTime.toString()
-                    }
-                };
-                for (let moveRetry = 0; !newMove && moveRetry < MaxMoveTableRetries; ++moveRetry) {
-                    //  - retry persistently until move table entry is created
-                    const moveUpdate = await dynamoDB.update(moveUpdateParams).promise();
-                    if (moveUpdate?.Items?.length === 1)
-                        newMove = moveUpdate.Items[0];
-                }
             }
 
-            if (newMove)
-                // return the move time
-                return {
-                    statusCode: 200,
-                    body: JSON.stringify({ message: 'Move posted', moveTime: requestedBoardTime.toString() }),
-                };
-
-            // if move table entry creation failed, return an error
-            return {
-                statusCode: 400,
-                body: JSON.stringify({ message: 'Move creation failed' }),
-            };
-        }
-    
-        case 'GET /boards/{id}/blocks/{hash}': {
-            const block = await getBlockAndOutgoingMoves (event.pathParameters?.id, event.pathParameters?.hash, event.queryParameters?.headerOnly);
-            return {
-                statusCode: 200,
-                body: JSON.stringify(block),
-            };
-        }
-
-        case 'POST /boards/{id}/blocks': {
-            // TODO: verify that block fits JSON schema for a block
-            // get clock table entry for board, and verify that board size matches
-            const boardSize = parseInt (event.body.boardSize);
-            const { boardTime, boardState } = event.body.block;
-            const previousBlockHash = event.body.previousBlockHash;
-            const block = { boardTime, boardState };
-            const blockHash = hash(block);
-            let clock = await getClockTableEntry (event.pathParameters?.id);
-            if (clock.boardSize !== boardSize)
-                return {
-                    statusCode: 400,
-                    body: JSON.stringify({ message: 'Board size mismatch' }),
-                };
-            // get previous block from block table, and its outgoing moves
-            const previousBlock = await getBlockAndOutgoingMoves (event.pathParameters?.id, previousBlockHash, false);
-            // verify that move list is complete, and that its hash matches the update
-            if (!previousBlock.isComplete || hash(previousBlock.moves) !== block.moveListHash)
-                return {
-                    statusCode: 400,
-                    body: JSON.stringify({ message: 'Move list mismatch' }),
-                };
-            // verify that block time is as determined by previous block + move list
-            const timesMatch = (previousBlock.moves?.length === MaxOutgoingMovesForBlock
-                ? (boardTime === previousBlock.moves[previousBlock.moves.length-1].moveTime)
-                : (BigInt(boardTime) > BigInt(previousBlock.moves?.length ? previousBlock.moves[previousBlock.moves.length-1].moveTime : previousBlock.blockTime)
-                    && BigInt(boardTime) === BigInt(previousBlock.blockTime) + MaxTicksBetweenBlocks));
-            if (!timesMatch)
-                return {
-                    statusCode: 400,
-                    body: JSON.stringify({ message: 'Block time mismatch' }),
-                };
-            // since all checks pass, create a block table entry with this board ID and hash, attributed to caller, conditional on none existing
-            // copy the previous block's rootBlockHash, and increment its predecessors count
-            const blockUpdateParams = {
-                TableName: blockTableName,
-                Key: { boardId: id, blockHash: blockHash },
-                ConditionExpression: 'attribute_not_exists(blockHash)',
-                UpdateExpression: 'set firstClaimant=:firstClaimant, claimants=:claimants, blockTime=:blockTime, block=:block, previousBlockHash=:previousBlockHash, predecessors=:predecessors, rootBlockHash=:rootBlockHash',
-                ExpressionAttributeValues: {
-                    ':previousBlockHash': previousBlockHash,
-                    ':rootBlockHash': previousBlock.rootBlockHash,
-                    ':predecessors': previousBlock.predecessors + 1,
-                    ':blockTime': boardTime,
-                    ':block': block,
-                    ':firstClaimant': callerId,
-                    ':claimants': [callerId]
-                }
-            };
-            let blockUpdatePromise = dynamoDB.update(blockUpdateParams).promise();
-            blockUpdatePromise.catch ((err) => {
-                if (err.code === 'ConditionalCheckFailedException') {
-                    // if the block already existed, update the existing entry to include the caller as one of the confirmers
-                    const blockUpdateParams = {
-                        TableName: blockTableName,
-                        Key: { boardId: id, blockHash: blockHash },
-                        UpdateExpression: 'set claimants=list_append(claimants,:userId)',
+            case 'POST /boards/{id}/moves': {
+                // move time is specified in milliseconds since epoch
+                const requestedUnixTime = parseInt (event.body?.time);
+                const originallyRequestedUnixTime = requestedUnixTime;
+                let requestedBoardTime = BigInt(requestedTime) * BlockTicksPerSecond / 1000n;
+                // TODO: verify that move fits JSON schema for a move
+                // Retry up to rnd(MaxMoveRetries) times:
+                const moveRetries = Math.floor(Math.random()*MaxMoveRetries);
+                let retry = 0, newClock = false, newMove = false;
+                for (retry = 0; retry <= moveRetries && !newClock; ++retry) {
+                    const currentTimeOnServer = Date.now();
+                    //  - check that originallyRequestedTime - maxMoveAnticipation <= currentTimeOnServer <= originallyRequestedTime + maxMoveDelay
+                    //    if it isn't, return an error
+                    if (!(originallyRequestedUnixTime - MaxMoveAnticipationMillisecs <= currentTimeOnServer <= originallyRequestedUnixTime + MaxMoveDelayMillisecs))
+                        return {
+                            statusCode: 400,
+                            body: JSON.stringify({ message: 'Move time out of range' }),
+                        };
+                    //  - retrieve clock table entry for board. Check permissions. Set requestedTime=max(requestedTime,lastMoveTimeRetrieved+1)
+                    let clock = await getClockTableEntry (dynamoDB, event.pathParameters?.id);
+                    // TODO: check permissions
+                    requestedBoardTime = Math.max (requestedBoardTime, clock.lastMoveTime + 1);
+                    //  - update clock table with requested time, conditional on lastMoveTime=lastMoveTimeRetrieved
+                    const clockUpdateParams = {
+                        TableName: clockTableName,
+                        Key: { boardId: event.pathParameters?.id },
+                        ConditionExpression: 'lastMoveTime = :lastMoveTime',
+                        UpdateExpression: 'set lastMoveTime=:requestedTime',
                         ExpressionAttributeValues: {
-                            ':userId': callerId
+                            ':requestedTime': requestedBoardTime.toString(),
+                            ':lastMoveTime': clock.lastMoveTime.toString()
                         }
                     };
+                    clockUpdate = await dynamoDB.update(clockUpdateParams).promise();
+                    if (clockUpdate?.Items?.length === 1)
+                        newClock = clockUpdate.Items[0];
                 }
-                else
-                    throw err;
-            })
-            // return success
-            return {
-                statusCode: 200,
-                body: JSON.stringify({ message: 'Block created', blockHash }),
-            };
-        }
-        break;
+                // if clock table update succeeded...
+                if (newClock) {
+                    //  - create a move table entry with this board ID, requestedTime, and originallyRequestedTime, attributed to caller
+                    const moveUpdateParams = {
+                        TableName: moveTableName,
+                        Key: { boardId: event.pathParameters?.id, moveTime: requestedBoardTime.toString() },
+                        ConditionExpression: 'attribute_not_exists(boardId)',
+                        UpdateExpression: 'set owner=:owner, originallyRequestedTime=:originallyRequestedTime',
+                        ExpressionAttributeValues: {
+                            ':owner': callerId,
+                            ':originallyRequestedTime': originallyRequestedBoardTime.toString()
+                        }
+                    };
+                    for (let moveRetry = 0; !newMove && moveRetry < MaxMoveTableRetries; ++moveRetry) {
+                        //  - retry persistently until move table entry is created
+                        const moveUpdate = await dynamoDB.update(moveUpdateParams).promise();
+                        if (moveUpdate?.Items?.length === 1)
+                            newMove = moveUpdate.Items[0];
+                    }
+                }
 
-        case 'GET /boards/{id}/state':
-            const since = event.queryParameters?.since;
-            let result = false;
-            // If 'since' is not specified as a query parameter:
-            if (!since) {
-                //  search the block table for all blocks for this board, sorted by time of creation (most recent first)
-                const blockQueryParams = {
+                if (newMove)
+                    // return the move time
+                    return {
+                        statusCode: 200,
+                        body: JSON.stringify({ message: 'Move posted', moveTime: requestedBoardTime.toString() }),
+                    };
+
+                // if move table entry creation failed, return an error
+                return {
+                    statusCode: 400,
+                    body: JSON.stringify({ message: 'Move creation failed' }),
+                };
+            }
+        
+            case 'GET /boards/{id}/blocks/{hash}': {
+                const block = await getBlockAndOutgoingMoves (dynamoDB, event.pathParameters?.id, event.pathParameters?.hash, event.queryParameters?.headerOnly);
+                return {
+                    statusCode: 200,
+                    body: JSON.stringify(block),
+                };
+            }
+
+            case 'POST /boards/{id}/blocks': {
+                // TODO: verify that block fits JSON schema for a block
+                // get clock table entry for board, and verify that board size matches
+                const boardSize = parseInt (event.body.boardSize);
+                const { boardTime, boardState } = event.body.block;
+                const previousBlockHash = event.body.previousBlockHash;
+                const block = { boardTime, boardState };
+                const blockHash = hash(block);
+                let clock = await getClockTableEntry (dynamoDB, event.pathParameters?.id);
+                if (clock.boardSize !== boardSize)
+                    return {
+                        statusCode: 400,
+                        body: JSON.stringify({ message: 'Board size mismatch' }),
+                    };
+                // get previous block from block table, and its outgoing moves
+                const previousBlock = await getBlockAndOutgoingMoves (dynamoDB, event.pathParameters?.id, previousBlockHash, false);
+                // verify that move list is complete, and that its hash matches the update
+                if (!previousBlock.isComplete || hash(previousBlock.moves) !== block.moveListHash)
+                    return {
+                        statusCode: 400,
+                        body: JSON.stringify({ message: 'Move list mismatch' }),
+                    };
+                // verify that block time is as determined by previous block + move list
+                const timesMatch = (previousBlock.moves?.length === MaxOutgoingMovesForBlock
+                    ? (boardTime === previousBlock.moves[previousBlock.moves.length-1].moveTime)
+                    : (BigInt(boardTime) > BigInt(previousBlock.moves?.length ? previousBlock.moves[previousBlock.moves.length-1].moveTime : previousBlock.blockTime)
+                        && BigInt(boardTime) === BigInt(previousBlock.blockTime) + MaxTicksBetweenBlocks));
+                if (!timesMatch)
+                    return {
+                        statusCode: 400,
+                        body: JSON.stringify({ message: 'Block time mismatch' }),
+                    };
+                // since all checks pass, create a block table entry with this board ID and hash, attributed to caller, conditional on none existing
+                // copy the previous block's rootBlockHash, and increment its predecessors count
+                const blockUpdateParams = {
                     TableName: blockTableName,
-                    IndexName: 'boardId-blockTime-index',
-                    KeyConditionExpression: 'boardId = :id',
+                    Key: { boardId: id, blockHash: blockHash },
+                    ConditionExpression: 'attribute_not_exists(blockHash)',
+                    UpdateExpression: 'set firstClaimant=:firstClaimant, claimants=:claimants, blockTime=:blockTime, block=:block, previousBlockHash=:previousBlockHash, predecessors=:predecessors, rootBlockHash=:rootBlockHash',
                     ExpressionAttributeValues: {
-                        ':id': boardId
-                    },
-                    ScanIndexForward: false
+                        ':previousBlockHash': previousBlockHash,
+                        ':rootBlockHash': previousBlock.rootBlockHash,
+                        ':predecessors': previousBlock.predecessors + 1,
+                        ':blockTime': boardTime,
+                        ':block': block,
+                        ':firstClaimant': callerId,
+                        ':claimants': [callerId]
+                    }
                 };
-                const blockQueryResult = await dynamoDB.query(blockQueryParams).promise();
-                let blocks = blockQueryResult.Items || [];
-                //  of all blocks with the most recent timestamp, pick the one with the highest confirmation count
-                blocks = blocks.filter ((block) => block.blockTime === blocks[0].blockTime);
-                blocks = blocks.sort ((a,b) => b.claimants.length - a.claimants.length);
-                let block = block[0];
-                // add outgoing moves
-                result = await addOutgoingMovesToBlock (block);
-            } else {
-                //  retrieve moves subsequent to specified time (up to a max of maxOutgoingMovesForBlock)
-                const moveQueryParams = {
-                    TableName: moveTableName,
-                    KeyConditionExpression: 'boardId = :id and moveTime > :since',
-                    ExpressionAttributeValues: {
-                        ':id': boardId,
-                        ':since': since
-                    },
-                    Limit: MaxOutgoingMovesForBlock
+                let blockUpdatePromise = dynamoDB.update(blockUpdateParams).promise();
+                blockUpdatePromise.catch ((err) => {
+                    if (err.code === 'ConditionalCheckFailedException') {
+                        // if the block already existed, update the existing entry to include the caller as one of the confirmers
+                        const blockUpdateParams = {
+                            TableName: blockTableName,
+                            Key: { boardId: id, blockHash: blockHash },
+                            UpdateExpression: 'set claimants=list_append(claimants,:userId)',
+                            ExpressionAttributeValues: {
+                                ':userId': callerId
+                            }
+                        };
+                    }
+                    else
+                        throw err;
+                })
+                // return success
+                return {
+                    statusCode: 200,
+                    body: JSON.stringify({ message: 'Block created', blockHash }),
                 };
-                const moveQueryResults = await dynamoDB.query(moveQueryParams).promise();
-                const moves = moveQueryResults.Items || [];
-                result = { moves };
             }
             break;
-    
-        default:
-            break;
-    }
 
-    if (result)
+            case 'GET /boards/{id}/state':
+                const since = event.queryParameters?.since;
+                let result = false;
+                // If 'since' is not specified as a query parameter:
+                if (!since) {
+                    //  search the block table for all blocks for this board, sorted by time of creation (most recent first)
+                    const blockQueryParams = {
+                        TableName: blockTableName,
+                        IndexName: 'boardId-blockTime-index',
+                        KeyConditionExpression: 'boardId = :id',
+                        ExpressionAttributeValues: {
+                            ':id': boardId
+                        },
+                        ScanIndexForward: false
+                    };
+                    const blockQueryResult = await dynamoDB.query(blockQueryParams).promise();
+                    let blocks = blockQueryResult.Items || [];
+                    //  of all blocks with the most recent timestamp, pick the one with the highest confirmation count
+                    blocks = blocks.filter ((block) => block.blockTime === blocks[0].blockTime);
+                    blocks = blocks.sort ((a,b) => b.claimants.length - a.claimants.length);
+                    let block = block[0];
+                    // add outgoing moves
+                    result = await addOutgoingMovesToBlock (dynamoDB, block);
+                } else {
+                    //  retrieve moves subsequent to specified time (up to a max of maxOutgoingMovesForBlock)
+                    const moveQueryParams = {
+                        TableName: moveTableName,
+                        KeyConditionExpression: 'boardId = :id and moveTime > :since',
+                        ExpressionAttributeValues: {
+                            ':id': boardId,
+                            ':since': since
+                        },
+                        Limit: MaxOutgoingMovesForBlock
+                    };
+                    const moveQueryResults = await dynamoDB.query(moveQueryParams).promise();
+                    const moves = moveQueryResults.Items || [];
+                    result = { moves };
+                }
+                break;
+        
+            default:
+                break;
+        }
+
+        if (result)
+            return {
+                statusCode: 200,
+                body: JSON.stringify(result),
+            };
+
         return {
-            statusCode: 200,
-            body: JSON.stringify(result),
+            statusCode: 400,
+            body: JSON.stringify({ message: 'Board state request failed' }),
         };
-
-    return {
-        statusCode: 400,
-        body: JSON.stringify({ message: 'Board state request failed' }),
     };
+    return handler;
 };
+const handler = makeHandlerForEndpoint();
 
-
-export { handler };
+module.exports = { handler, makeHandlerForEndpoint, createTables };
