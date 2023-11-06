@@ -43,7 +43,6 @@ const hash = (obj) => md5(stringify(obj));
 // Blocks are not guaranteed to be correct (their computations of evolving/modified state are not verified before storage),
 // but they are guaranteed to be consistent with the clock and move tables.
 // Clock tables include various denormalized summaries of moves, including the last move time and the current rules and permissions.
-const userTableName = 'soko-users';
 const clockTableName = 'soko-clocks';
 const moveTableName = 'soko-moves';
 const blockTableName = 'soko-blocks';
@@ -161,21 +160,38 @@ const makeBlockTableEntry = (args) => {
 
 const handler = async (event) => {
     const routeKey = event.httpMethod + ' ' + event.resource;
-
+    const callerId = event.requestContext?.identity?.cognitoIdentityId;
+            
     switch (routeKey) {
         case 'POST /boards':
             // create a random board ID
             const idNum = Math.floor(Math.random()*Math.pow(2,32));
             const id = idNum.toString(32);
             const time = BigInt(Date.now()) * BlockTicksPerSecond / 1000n;
+            const boardSize = parseInt (event.body?.boardSize);
+            // check that boardSize is a power of 2
+            if (boardSize & (boardSize - 1))
+                return {
+                    statusCode: 400,
+                    body: JSON.stringify({ message: 'Board size must be a power of 2' }),
+                };
+            // create the root block, and get the hash of it, but don't store it in the block table yet
+            const boardState = makeBoardState ({ board: { time: time.toString,
+                                                          lastEventTime: time.toString(),
+                                                          seed: idNum } });
+            const rootBlock = makeBlockTableEntry ({ boardTime: time, boardState });
+            const rootBlockHash = hash(rootBlock);
             // create a clock table entry with this board ID, owned by caller, with lastMoveTime=now, conditional on none existing
             const clockUpdateParams = {
                 TableName: clockTableName,
                 Key: { boardId: id },
                 ConditionExpression: 'attribute_not_exists(boardId)',
-                UpdateExpression: 'set owner=:owner, boardSize=:boardSize, lastMoveTime=:lastMoveTime',
+                UpdateExpression: 'set owner=:owner, boardSize=:boardSize, rootBlockHash=:rootBlockHash, rootBlock=:rootBlock, lastMoveTime=:lastMoveTime',
                 ExpressionAttributeValues: {
-                    ':owner': event.requestContext.identity.cognitoIdentityId,
+                    ':owner': callerId,
+                    ':boardSize': boardSize,
+                    ':rootBlockHash': rootBlockHash,
+                    ':rootBlock': rootBlock,
                     ':lastMoveTime': time.toString()
                 }
             };
@@ -183,24 +199,18 @@ const handler = async (event) => {
             let clockResult = await clockUpdate;
             if (!clockResult)
                 throw new Error ('Clock update failed');
-            // create an initial entry in the block table
-            // first create the new block itself
-            const boardState = makeBoardState ({ board: { time: time.toString,
-                                                          lastEventTime: time.toString(),
-                                                          seed: idNum } });
-            const block = makeBlockTableEntry ({ boardTime: time, boardState, head: true });
-            const blockHash = hash(block);
-            const userId = event.requestContext.identity.cognitoIdentityId;
+            // now create the root entry in the block table
             const blockUpdateParams = {
                 TableName: blockTableName,
-                Key: { boardId: id, blockHash: blockHash },
+                Key: { boardId: id, blockHash: rootBlockHash },
                 ConditionExpression: 'attribute_not_exists(boardId)',
-                UpdateExpression: 'set first=:firstClaimant, claimants=:claimants, boardTime=:boardTime, block=:block',
+                UpdateExpression: 'set first=:firstClaimant, claimants=:claimants, predecessors=:predecessors, boardTime=:boardTime, block=:block',
                 ExpressionAttributeValues: {
                     ':blockTime': time.toString(),
-                    ':block': block,
-                    ':firstClaimant': userId,
-                    ':claimants': [userId]
+                    ':block': rootBlock,
+                    ':predecessors': 0,
+                    ':firstClaimant': callerId,
+                    ':claimants': [callerId]
                 }
             };
             let blockUpdate = dynamoDB.update(blockUpdateParams).promise();
@@ -221,7 +231,7 @@ const handler = async (event) => {
                 IndexName: 'owner-lastMoveTime-index',
                 KeyConditionExpression: 'owner = :owner',
                 ExpressionAttributeValues: {
-                    ':owner': event.requestContext.identity.cognitoIdentityId
+                    ':owner': callerId
                 },
                 ScanIndexForward: false
             }; 
@@ -242,7 +252,7 @@ const handler = async (event) => {
                 Key: { boardId: event.pathParameters?.id },
                 ConditionExpression: 'owner = :owner',
                 ExpressionAttributeValues: {
-                    ':owner': event.requestContext.identity.cognitoIdentityId
+                    ':owner': callerId
                 }
             };
             let clockDeleteResult = await dynamoDB.delete(clockDeleteParams).promise();
@@ -327,7 +337,7 @@ const handler = async (event) => {
                     ConditionExpression: 'attribute_not_exists(boardId)',
                     UpdateExpression: 'set owner=:owner, originallyRequestedTime=:originallyRequestedTime',
                     ExpressionAttributeValues: {
-                        ':owner': event.requestContext.identity.cognitoIdentityId,
+                        ':owner': callerId,
                         ':originallyRequestedTime': originallyRequestedBoardTime.toString()
                     }
                 };
@@ -394,17 +404,20 @@ const handler = async (event) => {
                     body: JSON.stringify({ message: 'Block time mismatch' }),
                 };
             // since all checks pass, create a block table entry with this board ID and hash, attributed to caller, conditional on none existing
+            // copy the previous block's rootBlockHash, and increment its predecessors count
             const blockUpdateParams = {
                 TableName: blockTableName,
                 Key: { boardId: id, blockHash: blockHash },
                 ConditionExpression: 'attribute_not_exists(blockHash)',
-                UpdateExpression: 'set firstClaimant=:firstClaimant, claimants=:claimants, blockTime=:blockTime, block=:block, previousBlockHash=:previousBlockHash',
+                UpdateExpression: 'set firstClaimant=:firstClaimant, claimants=:claimants, blockTime=:blockTime, block=:block, previousBlockHash=:previousBlockHash, predecessors=:predecessors, rootBlockHash=:rootBlockHash',
                 ExpressionAttributeValues: {
                     ':previousBlockHash': previousBlockHash,
+                    ':rootBlockHash': previousBlock.rootBlockHash,
+                    ':predecessors': previousBlock.predecessors + 1,
                     ':blockTime': boardTime,
                     ':block': block,
-                    ':firstClaimant': userId,
-                    ':claimants': [userId]
+                    ':firstClaimant': callerId,
+                    ':claimants': [callerId]
                 }
             };
             let blockUpdatePromise = dynamoDB.update(blockUpdateParams).promise();
@@ -416,7 +429,7 @@ const handler = async (event) => {
                         Key: { boardId: id, blockHash: blockHash },
                         UpdateExpression: 'set claimants=list_append(claimants,:userId)',
                         ExpressionAttributeValues: {
-                            ':userId': userId
+                            ':userId': callerId
                         }
                     };
                 }
