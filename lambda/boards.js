@@ -222,9 +222,12 @@ const getClockTableEntry = async (dynamoDB, boardId) => {
 };
 
 // Subroutine: get outgoing move list for a block, and indicate whether this move list is complete
-const addOutgoingMovesToBlock = async (dynamoDB, block) => {
-    const clock = await getClockTableEntry (dynamoDB, block.boardId);
-
+const addOutgoingMovesToBlock = async (dynamoDB, block, boardId) => {
+    if (!block)
+        throw new Error ('Block not found');
+    const clock = await getClockTableEntry (dynamoDB, boardId);
+    if (!clock)
+        throw new Error ('Clock not found');
     const blockTime = BigInt (block.blockTime);
     const lastMoveTime = BigInt(clock.lastMoveTime);
     let maxMoveTime = blockTime + MaxTicksBetweenBlocks;  // moves at exactly maxMoveTime are allowed
@@ -264,7 +267,7 @@ const addOutgoingMovesToBlock = async (dynamoDB, block) => {
 const getBlockAndOutgoingMoves = async (dynamoDB, boardId, blockHash, headerOnly) => {
     let block = await getBlock (dynamoDB, boardId, blockHash, headerOnly);
     if (!headerOnly)
-        block = await addOutgoingMovesToBlock (dynamoDB, block);
+        block = await addOutgoingMovesToBlock (dynamoDB, block, boardId);
     return block;
 }
 
@@ -288,8 +291,14 @@ const makeHandlerForEndpoint = (endpoint) => {
     const handler = async (event) => {
         const routeKey = event.httpMethod + ' ' + event.resource;
         const callerId = event.requestContext?.identity?.cognitoIdentityId;
+        const boardId = event.pathParameters?.id;
+        const blockHash = event.pathParameters?.hash;
+        const since = event.queryParameters?.since;
+        const headerOnly = event.queryParameters?.headerOnly;
+
         const dynamoDB = createDynamoDBClient (endpoint);
 
+        let result = false;
         switch (routeKey) {
             case 'POST /boards':
                 // create a random board ID
@@ -378,7 +387,7 @@ const makeHandlerForEndpoint = (endpoint) => {
                 // delete the clock table entry for this board ID, conditional on owner matching caller ID
                 const clockDeleteParams = {
                     TableName: clockTableName,
-                    Key: { boardId: event.pathParameters?.id },
+                    Key: { boardId: boardId },
                     ConditionExpression: 'boardOwner = :owner',
                     ExpressionAttributeValues: {
                         ':owner': callerId
@@ -391,7 +400,7 @@ const makeHandlerForEndpoint = (endpoint) => {
                         TableName: blockTableName,
                         KeyConditionExpression: 'boardId = :id',
                         ExpressionAttributeValues: {
-                            ':id': event.pathParameters?.id
+                            ':id': boardId
                         }
                     };
                     let blockDelete = dynamoDB.query(blockDeleteParams).promise();
@@ -400,7 +409,7 @@ const makeHandlerForEndpoint = (endpoint) => {
                             TableName: moveTableName,
                             KeyConditionExpression: 'boardId = :id',
                             ExpressionAttributeValues: {
-                                ':id': event.pathParameters?.id
+                                ':id': boardId
                             }
                         };
                         let moveDelete = dynamoDB.query(moveDeleteParams).promise();
@@ -439,13 +448,13 @@ const makeHandlerForEndpoint = (endpoint) => {
                             body: JSON.stringify({ message: 'Move time out of range' }),
                         };
                     //  - retrieve clock table entry for board. Check permissions. Set requestedTime=max(requestedTime,lastMoveTimeRetrieved+1)
-                    let clock = await getClockTableEntry (dynamoDB, event.pathParameters?.id);
+                    let clock = await getClockTableEntry (dynamoDB, boardId);
                     // TODO: check permissions
                     requestedBoardTime = Math.max (requestedBoardTime, clock.lastMoveTime + 1);
                     //  - update clock table with requested time, conditional on lastMoveTime=lastMoveTimeRetrieved
                     const clockUpdateParams = {
                         TableName: clockTableName,
-                        Key: { boardId: event.pathParameters?.id },
+                        Key: { boardId: boardId },
                         ConditionExpression: 'lastMoveTime = :lastMoveTime',
                         UpdateExpression: 'set lastMoveTime=:requestedTime',
                         ExpressionAttributeValues: {
@@ -462,7 +471,7 @@ const makeHandlerForEndpoint = (endpoint) => {
                     //  - create a move table entry with this board ID, requestedTime, and originallyRequestedTime, attributed to caller
                     const moveUpdateParams = {
                         TableName: moveTableName,
-                        Key: { boardId: event.pathParameters?.id, moveTime: requestedBoardTime.toString() },
+                        Key: { boardId: boardId, moveTime: requestedBoardTime.toString() },
                         ConditionExpression: 'attribute_not_exists(boardId)',
                         UpdateExpression: 'set mover=:caller, origTime=:originallyRequestedTime',
                         ExpressionAttributeValues: {
@@ -493,7 +502,7 @@ const makeHandlerForEndpoint = (endpoint) => {
             }
         
             case 'GET /boards/{id}/blocks/{hash}': {
-                const block = await getBlockAndOutgoingMoves (dynamoDB, event.pathParameters?.id, event.pathParameters?.hash, event.queryParameters?.headerOnly);
+                const block = await getBlockAndOutgoingMoves (dynamoDB, boardId, blockHash, headerOnly);
                 return {
                     statusCode: 200,
                     body: JSON.stringify(block),
@@ -508,14 +517,14 @@ const makeHandlerForEndpoint = (endpoint) => {
                 const previousBlockHash = event.body.previousBlockHash;
                 const block = { boardTime, boardState };
                 const blockHash = hash(block);
-                let clock = await getClockTableEntry (dynamoDB, event.pathParameters?.id);
+                let clock = await getClockTableEntry (dynamoDB, boardId);
                 if (clock.boardSize !== boardSize)
                     return {
                         statusCode: 400,
                         body: JSON.stringify({ message: 'Board size mismatch' }),
                     };
                 // get previous block from block table, and its outgoing moves
-                const previousBlock = await getBlockAndOutgoingMoves (dynamoDB, event.pathParameters?.id, previousBlockHash, false);
+                const previousBlock = await getBlockAndOutgoingMoves (dynamoDB, boardId, previousBlockHash, false);
                 // verify that move list is complete, and that its hash matches the update
                 if (!previousBlock.isComplete || hash(previousBlock.moves) !== block.moveListHash)
                     return {
@@ -574,8 +583,6 @@ const makeHandlerForEndpoint = (endpoint) => {
             break;
 
             case 'GET /boards/{id}/state':
-                const since = event.queryParameters?.since;
-                let result = false;
                 // If 'since' is not specified as a query parameter:
                 if (!since) {
                     //  search the block table for all blocks for this board, sorted by time of creation (most recent first)
@@ -593,9 +600,12 @@ const makeHandlerForEndpoint = (endpoint) => {
                     //  of all blocks with the most recent timestamp, pick the one with the highest confirmation count
                     blocks = blocks.filter ((block) => block.blockTime === blocks[0].blockTime);
                     blocks = blocks.sort ((a,b) => b.claimants.length - a.claimants.length);
-                    let block = block[0];
+                    let block = blocks[0];
                     // add outgoing moves
-                    result = await addOutgoingMovesToBlock (dynamoDB, block);
+                    if (block)
+                        result = await addOutgoingMovesToBlock (dynamoDB, block, boardId);
+                    else
+                        result = { block, moves: [] }
                 } else {
                     //  retrieve moves subsequent to specified time (up to a max of maxOutgoingMovesForBlock)
                     const moveQueryParams = {
@@ -613,8 +623,8 @@ const makeHandlerForEndpoint = (endpoint) => {
                 }
                 break;
         
-            default:
-                break;
+                default:
+                    break;
         }
 
         if (result)
