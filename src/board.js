@@ -307,19 +307,24 @@ class Board {
         const json = JSON.parse (str);
         this.time = BigInt (json.time);
         this.lastEventTime = BigInt (json.lastEventTime);
-        this.rng.initFromString (json.rng);
-        if (json.cell.length !== this.cell.length)
-            throw new Error ("Tried to load "+json.cell.size()+"-cell board file into "+this.cell.size()+"-cell board");
-        const unknownTypes = json.types.filter ((type) => !(type in this.grammar.typeIndex));
-        if (unknownTypes.length)
-            throw new Error ("Tried to load board with unknown types: "+unknownTypes.join(' '));
-        json.cell.forEach ((type_state_meta, index) => {
-            if (typeof(type_state_meta) === 'number')
-                type_state_meta = [type_state_meta];
-            this.setCellByIndex (index, { type: this.grammar.typeIndex[json.types[type_state_meta[0]]],
-                                          state: type_state_meta[1] || '',
-                                          ...(type_state_meta[2] ? {meta:type_state_meta[2]} : {})});
-        });
+        if (json.rng)
+            this.rng.initFromString (json.rng);
+        else if (json.seed)
+            this.rng.seed(json.seed);
+        if (json.cell) {
+            if (json.cell.length !== this.cell.length)
+                throw new Error ("Tried to load "+json.cell.size()+"-cell board file into "+this.cell.size()+"-cell board");
+            const unknownTypes = json.types.filter ((type) => !(type in this.grammar.typeIndex));
+            if (unknownTypes.length)
+                throw new Error ("Tried to load board with unknown types: "+unknownTypes.join(' '));
+            json.cell.forEach ((type_state_meta, index) => {
+                if (typeof(type_state_meta) === 'number')
+                    type_state_meta = [type_state_meta];
+                this.setCellByIndex (index, { type: this.grammar.typeIndex[json.types[type_state_meta[0]]],
+                                              state: type_state_meta[1] || '',
+                                              ...(type_state_meta[2] ? {meta:type_state_meta[2]} : {})});
+            });
+        }
     }
 
     // TODO
