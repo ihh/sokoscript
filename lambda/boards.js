@@ -1,3 +1,6 @@
+// AWS SDK
+const getAwsSdk = () => require('aws-sdk');
+
 // Global parameters
 const MaxOutgoingMovesForBlock = 100;
 const MaxTimeInSecondsBetweenBlocks = 600;
@@ -41,12 +44,12 @@ const stringify = (object) => {
     return JSON.stringify(copyObjectWithSortedKeys(object))
 }
 
-// This all builds up to our subroutine that hashes a JavaScript object:
+// Canonical hash for a JSON-representable object
 const hash = (obj) => md5(stringify(obj));
 
 // Subroutine: create AWS dynamoDB client for given (or default) endpoint
 const createDynamoDBClient = (endpoint) => {
-    const AWS = require('aws-sdk');
+    const AWS = getAwsSdk();
     if (endpoint)
         AWS.config.update({endpoint: endpoint});
     return new AWS.DynamoDB.DocumentClient();
@@ -54,7 +57,7 @@ const createDynamoDBClient = (endpoint) => {
 
 // Subroutine: create AWS dynamoDB instance for given (or default) endpoint
 const createDynamoDB = (endpoint) => {
-    const AWS = require('aws-sdk');
+    const AWS = getAwsSdk();
     if (endpoint)
         AWS.config.update({endpoint: endpoint});
     return new AWS.DynamoDB();
@@ -234,7 +237,7 @@ const addOutgoingMovesToBlock = async (dynamoDB, block, boardId) => {
     let expectedLastMoveTime, blockTimedOut = false;
     if (maxMoveTime > lastMoveTime) {
         maxMoveTime = lastMoveTime;  // avoid retrieving moves that weren't yet reflected in the clock table when we queried it
-        expectedLastMoveTime = lastMoveTime.toString();
+        expectedLastMoveTime = lastMoveTime?.toString();
     } else  // lastMoveTime >= maxMoveTime
         blockTimedOut = true;
 
@@ -249,8 +252,8 @@ const addOutgoingMovesToBlock = async (dynamoDB, block, boardId) => {
         },
         ExpressionAttributeValues: {
             ':id': boardId,
-            ':lastBlockTime': blockTime.toString(),
-            ':maxMoveTime': maxMoveTime.toString()
+            ':lastBlockTime': blockTime?.toString(),
+            ':maxMoveTime': maxMoveTime?.toString()
         }
     };
 
@@ -278,11 +281,11 @@ const makeBoardState = (args) => {
 
 const makeBlockTableEntry = (args) => {
     return {
-        boardTime: args.time.toString(),
+        boardTime: args.time?.toString(),
         boardState: args.boardState || {},
         boardHash: hash(args.boardState || {}),
         moveListHash: hash(args.moveList || []),
-        previousBoardHash: hash(previousBoardState || {}),
+        previousBlockHash: args.previousBlockHash || '',
         ...args
     };
 };
@@ -301,11 +304,12 @@ const makeHandlerForEndpoint = (endpoint) => {
         let result = false;
         switch (routeKey) {
             case 'POST /boards':
-                // create a random board ID
-                const idNum = Math.floor(Math.random()*Math.pow(2,32));
-                const id = idNum.toString(32);
+                // create a random board ID, use it as a seed for the Mersenne Twister
+                const seed32 = Math.floor(Math.random()*Math.pow(2,32));
+                const id = seed32.toString(32);
                 const time = BigInt(Date.now()) * BlockTicksPerSecond / 1000n;
                 const boardSize = parseInt (event.body?.boardSize);
+
                 // check that boardSize is a power of 2
                 if (boardSize & (boardSize - 1))
                     return {
@@ -313,12 +317,13 @@ const makeHandlerForEndpoint = (endpoint) => {
                         body: JSON.stringify({ message: 'Board size must be a power of 2' }),
                     };
                 // create the root block, and get the hash of it, but don't store it in the block table yet
-                const boardState = makeBoardState ({ board: { time: time.toString,
-                                                            lastEventTime: time.toString(),
-                                                            seed: idNum } });
-                const rootBlock = makeBlockTableEntry ({ boardTime: time, boardState });
+                const boardState = makeBoardState ({ board: { time: time?.toString(),
+                                                              lastEventTime: time?.toString(),
+                                                              seed: seed32 } });
+                const rootBlock = makeBlockTableEntry ({ boardTime: time.toString(), boardState });
                 const rootBlockHash = hash(rootBlock);
                 // create a clock table entry with this board ID, owned by caller, with lastMoveTime=now, conditional on none existing
+                console.warn({event,boardSize})
                 const clockUpdateParams = {
                     TableName: clockTableName,
                     Key: { boardId: id },
@@ -329,7 +334,7 @@ const makeHandlerForEndpoint = (endpoint) => {
                         ':boardSize': boardSize,
                         ':rootBlockHash': rootBlockHash,
                         ':rootBlock': stringify(rootBlock),
-                        ':lastMoveTime': time.toString()
+                        ':lastMoveTime': time?.toString()
                     }
                 };
                 let clockUpdate = dynamoDB.update(clockUpdateParams).promise();
@@ -343,7 +348,7 @@ const makeHandlerForEndpoint = (endpoint) => {
                     ConditionExpression: 'attribute_not_exists(boardId)',
                     UpdateExpression: 'set first=:firstClaimant, claimants=:claimants, predecessors=:predecessors, boardTime=:boardTime, block=:block',
                     ExpressionAttributeValues: {
-                        ':blockTime': time.toString(),
+                        ':blockTime': time?.toString(),
                         ':block': rootBlock,
                         ':previousBlockHash': hash({boardId}),
                         ':predecessors': 0,
@@ -458,8 +463,8 @@ const makeHandlerForEndpoint = (endpoint) => {
                         ConditionExpression: 'lastMoveTime = :lastMoveTime',
                         UpdateExpression: 'set lastMoveTime=:requestedTime',
                         ExpressionAttributeValues: {
-                            ':requestedTime': requestedBoardTime.toString(),
-                            ':lastMoveTime': clock.lastMoveTime.toString()
+                            ':requestedTime': requestedBoardTime?.toString(),
+                            ':lastMoveTime': clock.lastMoveTime?.toString()
                         }
                     };
                     clockUpdate = await dynamoDB.update(clockUpdateParams).promise();
@@ -471,7 +476,7 @@ const makeHandlerForEndpoint = (endpoint) => {
                     //  - create a move table entry with this board ID, requestedTime, and originallyRequestedTime, attributed to caller
                     const moveUpdateParams = {
                         TableName: moveTableName,
-                        Key: { boardId: boardId, moveTime: requestedBoardTime.toString() },
+                        Key: { boardId: boardId, moveTime: requestedBoardTime?.toString() },
                         ConditionExpression: 'attribute_not_exists(boardId)',
                         UpdateExpression: 'set mover=:caller, origTime=:originallyRequestedTime',
                         ExpressionAttributeValues: {
@@ -491,7 +496,7 @@ const makeHandlerForEndpoint = (endpoint) => {
                     // return the move time
                     return {
                         statusCode: 200,
-                        body: JSON.stringify({ message: 'Move posted', moveTime: requestedBoardTime.toString() }),
+                        body: JSON.stringify({ message: 'Move posted', moveTime: requestedBoardTime?.toString() }),
                     };
 
                 // if move table entry creation failed, return an error
