@@ -35,7 +35,7 @@ else {
     const handler = makeHandlerForEndpoint (endpoint);
     const makeHandler = (httpMethod, resource) => {
         return (req, res) => {
-            const userId = req.body?.userId || defaultUserId;
+            const userId = req.body?.user || defaultUserId;
             console.warn (httpMethod + ' ' + resource
             + ' @' + userId
             + (Object.keys(req.params||{}).length ? ' ' + JSON.stringify(req.params) : '')
