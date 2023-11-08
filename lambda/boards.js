@@ -195,12 +195,12 @@ const getBlock = async (docClient, boardId, blockHash, headerOnly) => {
     console.warn({block})
     return { boardId,
              blockHash,
-             rootBlockHash: block.rootBlockHash,
-             previousBlockHash: block.previousBlockHash,
-             numberOfClaims: block.claimantList?.length,
-             ...(headerOnly ? {} : { firstClaimant: block.firstClaimant,
-                                     claimantList: block.claimantList,
-                                     block: block.theBlock }) }
+             blockTime: block.blockTime.N,
+             ...(block.previousBlockHash ? {previousBlockHash: block.previousBlockHash.S} : {}),
+             numberOfClaims: block.claimantList?.L.length,
+             ...(headerOnly ? {} : { firstClaimant: block.firstClaimant?.S,
+                                     claimantList: block.claimantList?.L,
+                                     block: JSON.parse(block.theBlock.S) }) }
 };
 
 // Subroutine: get clock table entry for a board
@@ -222,14 +222,15 @@ const getClockTableEntry = async (docClient, boardId) => {
 };
 
 // Subroutine: get outgoing move list for a block, and indicate whether this move list is complete
-const   OutgoingMovesToBlock = async (docClient, block, boardId) => {
+const addOutgoingMovesToBlock = async (docClient, block, boardId) => {
     if (!block)
         throw new Error ('Block not found');
     const clock = await getClockTableEntry (docClient, boardId);
     if (!clock)
         throw new Error ('Clock not found');
+    console.warn({block,clock})
     const blockTime = BigInt (block.blockTime);
-    const lastMoveTime = BigInt(clock.lastMoveTime);
+    const lastMoveTime = BigInt(clock.lastMoveTime.N);
     let maxMoveTime = blockTime + MaxTicksBetweenBlocks;  // moves at exactly maxMoveTime are allowed
     let expectedLastMoveTime, blockTimedOut = false;
     if (maxMoveTime > lastMoveTime) {
@@ -241,22 +242,22 @@ const   OutgoingMovesToBlock = async (docClient, block, boardId) => {
     // query move table
     const moveQueryParams = {
         TableName: moveTableName,
-        KeyConditionExpression: '#id = :id and #time > :lastBlockTime and #time <= :maxMoveTime',
+        KeyConditionExpression: '#id = :id and #time between :lastBlockTime and :maxMoveTime',
         Limit: MaxOutgoingMovesForBlock,
         ExpressionAttributeNames: {
             '#id': 'boardId',
             '#time': 'moveTime'
         },
         ExpressionAttributeValues: {
-            ':id': boardId,
-            ':lastBlockTime': blockTime?.toString()||'',
-            ':maxMoveTime': maxMoveTime?.toString()||''
+            ':id': {S:boardId},
+            ':lastBlockTime': {N:blockTime.toString()},
+            ':maxMoveTime': {N:(maxMoveTime+BigInt(1)).toString()}
         }
     };
 
     let moveResult = await docClient.send(new QueryCommand(moveQueryParams));
     const moves = moveResult.Items;
-    if (!moves || (typeof(expectedLastMoveTime) !== 'undefined' && moves[moves.length-1].moveTime !== expectedLastMoveTime))
+    if (!moves || (typeof(expectedLastMoveTime) !== 'undefined' && (moves.length && moves[moves.length-1]?.moveTime !== expectedLastMoveTime)))
         throw new Error ('Move query failed');
 
     const isComplete = blockTimedOut || (moveResult.Items.length === MaxOutgoingMovesForBlock);
@@ -328,7 +329,7 @@ const makeHandlerForEndpoint = (endpoint) => {
                         ':boardSize': boardSize,
                         ':rootBlockHash': rootBlockHash,
                         ':rootBlock': stringify(rootBlock),
-                        ':lastMoveTime': time.toString()
+                        ':lastMoveTime': time
                     },
                     ReturnValues: 'ALL_NEW'
                 }
@@ -341,11 +342,10 @@ const makeHandlerForEndpoint = (endpoint) => {
                     TableName: blockTableName,
                     Key: { boardId: id, blockHash: rootBlockHash },
                     ConditionExpression: 'attribute_not_exists(boardId)',
-                    UpdateExpression: 'set firstClaimant=:firstClaimant, claimantList=:claimantList, predecessorCount=:predecessorCount, blockTime=:blockTime, previousBlockHash=:previousBlockHash, theBlock=:block',
+                    UpdateExpression: 'set firstClaimant=:firstClaimant, claimantList=:claimantList, predecessorCount=:predecessorCount, blockTime=:blockTime, theBlock=:block',
                     ExpressionAttributeValues: {
                         ':blockTime': time,
                         ':block': rootBlock,
-                        ':previousBlockHash': hash(''),
                         ':predecessorCount': 0,
                         ':firstClaimant': callerId,
                         ':claimantList': [callerId]
@@ -446,7 +446,7 @@ const makeHandlerForEndpoint = (endpoint) => {
                         UpdateExpression: 'set lastMoveTime=:requestedTime',
                         ExpressionAttributeValues: {
                             ':requestedTime': requestedBoardTime.toString(),
-                            ':lastMoveTime': clock?.lastMoveTime?.S
+                            ':lastMoveTime': clock?.lastMoveTime?.N
                         },
                         ReturnValues: 'UPDATED_NEW'
                     };
@@ -523,17 +523,16 @@ const makeHandlerForEndpoint = (endpoint) => {
                         body: JSON.stringify({ message: 'Block time mismatch' }),
                     };
                 // since all checks pass, create a block table entry with this board ID and hash, attributed to caller, conditional on none existing
-                // copy the previous block's rootBlockHash, and increment its predecessorCount count
+                // increment the previous block's predecessorCount count
                 const block = makeBlockTableEntry ({boardTime, boardState, previousBlockHash, moveList: previousBlock.moves, moveListHash});
                 const blockHash = hash(block);
                 const blockUpdateParams = {
                     TableName: blockTableName,
                     Key: { boardId: id, blockHash: blockHash },
                     ConditionExpression: 'attribute_not_exists(blockHash)',
-                    UpdateExpression: 'set firstClaimant=:firstClaimant, claimantList=:claimantList, blockTime=:blockTime, theBlock=:block, previousBlockHash=:previousBlockHash, predecessorCount=:predecessorCount, rootBlockHash=:rootBlockHash',
+                    UpdateExpression: 'set firstClaimant=:firstClaimant, claimantList=:claimantList, blockTime=:blockTime, theBlock=:block, previousBlockHash=:previousBlockHash, predecessorCount=:predecessorCount',
                     ExpressionAttributeValues: {
                         ':previousBlockHash': previousBlockHash,
-                        ':rootBlockHash': previousBlock.rootBlockHash,
                         ':predecessorCount': previousBlock.predecessorCount + 1,
                         ':blockTime': boardTime,
                         ':block': block,
@@ -578,19 +577,26 @@ const makeHandlerForEndpoint = (endpoint) => {
                         ScanIndexForward: false
                     };
                     const blockQueryResult = await docClient.send(new QueryCommand(blockQueryParams));
+                    console.warn({blockQueryResult})
                     let blocks = blockQueryResult.Items || [];
+                    if (!blocks.length)
+                        return {
+                            statusCode: 400,
+                            body: JSON.stringify({ message: 'No blocks found' }),
+                        };
                     console.warn(JSON.stringify({blocks}))
                     //  of all blocks with the most recent timestamp, pick the one with the highest confirmation count
                     blocks = blocks.filter ((block) => block.blockTime.N === blocks[0].blockTime.N);
                     blocks = blocks.sort ((a,b) => b.claimantList.L.length - a.claimantList.L.length);
-                    let block = { blockHash: blocks[0].blockHash.S,
-                                  moveListHash: blocks[0].theBlock.moveListHash.S,
-                                  boardState: blocks[0].theBlock.boardState.S,
-                                  blockTime: blocks[0].blockTime.N };
+                    const block = JSON.parse (blocks[0].theBlock.S);
+                    const minimalBlock = { blockHash: blocks[0].blockHash.S,
+                                           blockTime: blocks[0].blockTime.N,
+                                           moveListHash: block.moveListHash,
+                                           boardState: block.boardState };
                     // add outgoing moves
                     let result;
                     if (block)
-                        result = await addOutgoingMovesToBlock (docClient, block, boardId);
+                        result = await addOutgoingMovesToBlock (docClient, minimalBlock, boardId);
                     else
                         result = { block, moves: [] }
                     return {
