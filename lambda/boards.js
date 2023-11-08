@@ -192,6 +192,7 @@ const getBlock = async (docClient, boardId, blockHash, headerOnly) => {
     if (blockResult.Items?.length !== 1)
         throw new Error ('Block not found');
     const block = blockResult.Items[0];
+    console.warn({block})
     return { boardId,
              blockHash,
              rootBlockHash: block.rootBlockHash,
@@ -221,7 +222,7 @@ const getClockTableEntry = async (docClient, boardId) => {
 };
 
 // Subroutine: get outgoing move list for a block, and indicate whether this move list is complete
-const addOutgoingMovesToBlock = async (docClient, block, boardId) => {
+const   OutgoingMovesToBlock = async (docClient, block, boardId) => {
     if (!block)
         throw new Error ('Block not found');
     const clock = await getClockTableEntry (docClient, boardId);
@@ -277,13 +278,12 @@ const makeBoardState = (args) => {
 
 const makeBlockTableEntry = (args) => {
     return stringify ({
-        boardTime: args.time?.toString(),
+        boardTime: args.boardTime,
         boardState: args.boardState || {},
         boardHash: hash(args.boardState || {}),
         moveList: args.moveList || [],
         moveListHash: hash(args.moveList || []),
-        previousBlockHash: args.previousBlockHash || '',
-        ...args
+        previousBlockHash: args.previousBlockHash || ''
     });
 };
 
@@ -343,7 +343,7 @@ const makeHandlerForEndpoint = (endpoint) => {
                     ConditionExpression: 'attribute_not_exists(boardId)',
                     UpdateExpression: 'set firstClaimant=:firstClaimant, claimantList=:claimantList, predecessorCount=:predecessorCount, blockTime=:blockTime, previousBlockHash=:previousBlockHash, theBlock=:block',
                     ExpressionAttributeValues: {
-                        ':blockTime': time?.toString(),
+                        ':blockTime': time,
                         ':block': rootBlock,
                         ':previousBlockHash': hash(''),
                         ':predecessorCount': 0,
@@ -463,10 +463,11 @@ const makeHandlerForEndpoint = (endpoint) => {
                         TableName: moveTableName,
                         Key: { boardId: boardId, moveTime: newMoveTime },
                         ConditionExpression: 'attribute_not_exists(boardId)',
-                        UpdateExpression: 'set mover=:caller, origTime=:origTime',
+                        UpdateExpression: 'set mover=:caller, origTime=:origTime, move=:move',
                         ExpressionAttributeValues: {
                             ':caller': callerId,
-                            ':origTime': originallyRequestedUnixTime
+                            ':origTime': originallyRequestedUnixTime,
+                            ':move': move
                         },
                         ReturnValues: 'ALL_NEW'
                     };
@@ -500,22 +501,13 @@ const makeHandlerForEndpoint = (endpoint) => {
 
             case 'POST /boards/{id}/blocks': {
                 // TODO: verify that block fits JSON schema for a block
+                const { previousBlockHash, moveListHash, boardTime, boardState } = event.body;
                 // get clock table entry for board, and verify that board size matches
-                const boardSize = parseInt (event.body.boardSize);
-                const { boardTime, boardState } = event.body.block;
-                const previousBlockHash = event.body.previousBlockHash;
-                const block = { boardTime, boardState };
-                const blockHash = hash(block);
                 let clock = await getClockTableEntry (docClient, boardId);
-                if (clock.boardSize !== boardSize)
-                    return {
-                        statusCode: 400,
-                        body: JSON.stringify({ message: 'Board size mismatch' }),
-                    };
                 // get previous block from block table, and its outgoing moves
                 const previousBlock = await getBlockAndOutgoingMoves (docClient, boardId, previousBlockHash, false);
                 // verify that move list is complete, and that its hash matches the update
-                if (!previousBlock.isComplete || hash(previousBlock.moves) !== block.moveListHash)
+                if (!previousBlock.isComplete || hash(previousBlock.moves) !== moveListHash)
                     return {
                         statusCode: 400,
                         body: JSON.stringify({ message: 'Move list mismatch' }),
@@ -532,11 +524,13 @@ const makeHandlerForEndpoint = (endpoint) => {
                     };
                 // since all checks pass, create a block table entry with this board ID and hash, attributed to caller, conditional on none existing
                 // copy the previous block's rootBlockHash, and increment its predecessorCount count
+                const block = makeBlockTableEntry ({boardTime, boardState, previousBlockHash, moveList: previousBlock.moves, moveListHash});
+                const blockHash = hash(block);
                 const blockUpdateParams = {
                     TableName: blockTableName,
                     Key: { boardId: id, blockHash: blockHash },
                     ConditionExpression: 'attribute_not_exists(blockHash)',
-                    UpdateExpression: 'set firstClaimant=:firstClaimant, claimantList=:claimantList, blockTime=:blockTime, block=:block, previousBlockHash=:previousBlockHash, predecessorCount=:predecessorCount, rootBlockHash=:rootBlockHash',
+                    UpdateExpression: 'set firstClaimant=:firstClaimant, claimantList=:claimantList, blockTime=:blockTime, theBlock=:block, previousBlockHash=:previousBlockHash, predecessorCount=:predecessorCount, rootBlockHash=:rootBlockHash',
                     ExpressionAttributeValues: {
                         ':previousBlockHash': previousBlockHash,
                         ':rootBlockHash': previousBlock.rootBlockHash,
@@ -579,16 +573,20 @@ const makeHandlerForEndpoint = (endpoint) => {
                         IndexName: 'boardId-blockTime-index',
                         KeyConditionExpression: 'boardId = :id',
                         ExpressionAttributeValues: {
-                            ':id': boardId
+                            ':id': {S:boardId}
                         },
                         ScanIndexForward: false
                     };
                     const blockQueryResult = await docClient.send(new QueryCommand(blockQueryParams));
                     let blocks = blockQueryResult.Items || [];
+                    console.warn(JSON.stringify({blocks}))
                     //  of all blocks with the most recent timestamp, pick the one with the highest confirmation count
-                    blocks = blocks.filter ((block) => block.blockTime === blocks[0].blockTime);
-                    blocks = blocks.sort ((a,b) => b.claimantList.length - a.claimantList.length);
-                    let block = blocks[0];
+                    blocks = blocks.filter ((block) => block.blockTime.N === blocks[0].blockTime.N);
+                    blocks = blocks.sort ((a,b) => b.claimantList.L.length - a.claimantList.L.length);
+                    let block = { blockHash: blocks[0].blockHash.S,
+                                  moveListHash: blocks[0].theBlock.moveListHash.S,
+                                  boardState: blocks[0].theBlock.boardState.S,
+                                  blockTime: blocks[0].blockTime.N };
                     // add outgoing moves
                     let result;
                     if (block)
@@ -606,8 +604,8 @@ const makeHandlerForEndpoint = (endpoint) => {
                         TableName: moveTableName,
                         KeyConditionExpression: 'boardId = :id and moveTime > :since',
                         ExpressionAttributeValues: {
-                            ':id': boardId,
-                            ':since': (BigInt(event.queryParameters?.since) * BlockTicksPerSecond / 1000n).toString()
+                            ':id': {S:boardId},
+                            ':since': {N:(BigInt(event.queryParameters?.since) * BlockTicksPerSecond / 1000n).toString()}
                         },
                         Limit: MaxOutgoingMovesForBlock
                     };
