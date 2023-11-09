@@ -295,16 +295,23 @@ class Board {
         this.evolveToTime (t, hardStop);
     }
 
+    toJSON() {
+        return { time: this.time.toString(),
+                lastEventTime: this.lastEventTime.toString(),
+                rng: this.rng.toString(),
+                types: this.grammar.types,
+                cell: this.cell.map ((cell) => cell.state || cell.meta ? [cell.type,cell.state || ''].concat(cell.meta ? [cell.meta] : []) : cell.type) }
+    }
+
     toString() {
-        return stringify ({ time: this.time.toString(),
-                            lastEventTime: this.lastEventTime.toString(),
-                            rng: this.rng.toString(),
-                            types: this.grammar.types,
-                            cell: this.cell.map ((cell) => cell.state || cell.meta ? [cell.type,cell.state || ''].concat(cell.meta ? [cell.meta] : []) : cell.type) })
+        return stringify (this.toJSON())
     }
 
     initFromString (str) {
-        const json = JSON.parse (str);
+        this.initFromString (JSON.parse (str));
+    }
+
+    initFromJSON (json) {
         this.time = BigInt (json.time);
         this.lastEventTime = BigInt (json.lastEventTime);
         if (json.rng)

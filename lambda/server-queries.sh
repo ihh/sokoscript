@@ -6,12 +6,16 @@ curl -H 'Content-Type: application/json' http://localhost:3000/boards
 
 curl -X POST -H 'Content-Type: application/json' -d '{"boardSize":64}' http://localhost:3000/boards
 aws dynamodb scan --table-name soko-clocks --endpoint-url http://localhost:8000 
+aws dynamodb scan --table-name soko-blocks --endpoint-url http://localhost:8000 
 curl -H 'Content-Type: application/json' http://localhost:3000/boards
 
 curl -X DELETE -H 'Content-Type: application/json' http://localhost:3000/boards/XXXXX
+aws dynamodb scan --table-name soko-clocks --endpoint-url http://localhost:8000 
+aws dynamodb scan --table-name soko-blocks --endpoint-url http://localhost:8000 
+curl -H 'Content-Type: application/json' http://localhost:3000/boards
 
 # post move with current time
-node -e 'd=Date.now();cmd="curl -X POST -H '"'"'Content-Type: application/json'"'"' -d '"'"'{\"time\":"+d+"}'"'"' "+process.argv[1];console.log(cmd);out=require("child_process").execSync(cmd).toString();console.log(out)' http://localhost:3000/boards/XXXXX/moves
+node -e 'd=Date.now();cmd="curl -X POST -H '"'"'Content-Type: application/json'"'"' -d '"'"'{\"time\":"+d+"}'"'"' http://localhost:3000/boards/"+process.argv[1]+"/moves";console.log(cmd);out=require("child_process").execSync(cmd).toString();console.log(out)' BOARD_ID
 
 # post block update with empty move list
-node -e 'ml=[];import(process.env.HOME+"/sokoscript/src/md5.js").then((md5)=>{h=md5.hexMD5(JSON.stringify(ml));previousBlockHash="d9e96e8d99d83ff3527227502f683d36";boardState=null;cmd="curl -X POST -H '"'"'Content-Type: application/json'"'"' -d '"'"'{\"time\":"+d+"}'"'"' "+process.argv[1];console.log(cmd);out=require("child_process").execSync(cmd).toString();console.log(out)' http://localhost:3000/boards/XXXXX/moves
+node -e 'ml=[];import("$HOME/sokoscript/src/md5.js").then((md5)=>{h=md5.hexMD5(JSON.stringify(ml));previousBlockHash="d9e96e8d99d83ff3527227502f683d36";boardState=null;cmd="curl -X POST -H '"'"'Content-Type: application/json'"'"' -d '"'"'{\"time\":"+d+"}'"'"' http://localhost:3000/boards/"+process.argv[1]+"/blocks";console.log(cmd);out=require("child_process").execSync(cmd).toString();console.log(out)' BOARD_ID

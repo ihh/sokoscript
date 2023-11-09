@@ -1,6 +1,8 @@
 // AWS SDK
 import { DynamoDBClient, CreateTableCommand, DeleteTableCommand, QueryCommand, DeleteItemCommand } from "@aws-sdk/client-dynamodb";
 import { DynamoDBDocumentClient, UpdateCommand } from "@aws-sdk/lib-dynamodb";
+import { unmarshall } from "@aws-sdk/util-dynamodb";
+import e from "express";
 
 // Global parameters
 const MaxOutgoingMovesForBlock = 100;
@@ -14,6 +16,11 @@ const MaxTicksBetweenBlocks = BigInt(MaxTimeInSecondsBetweenBlocks) * BlockTicks
 
 const MaxMoveRetries = 3;
 const MaxMoveTableRetries = 10;
+
+const createEmptyBoardState = (time, seed) => ({ grammar: '',
+                                                 board: { time: time.toString(),
+                                                          lastEventTime: time.toString(),
+                                                          seed } });
 
 // The conceptual hierarchy of tables is clocks->moves->blocks items in each of which can be owned by users.
 // Each clock defines a board, whose state is updated by moves, whose accumulation is reflected in blocks.
@@ -193,24 +200,44 @@ const getBlock = async (docClient, boardId, blockHash, headerOnly) => {
         throw new Error ('Block not found');
     const block = blockResult.Items[0];
     console.warn({block})
-    return { boardId,
-             blockHash,
-             blockTime: block.blockTime.N,
-             ...(block.previousBlockHash ? {previousBlockHash: block.previousBlockHash.S} : {}),
-             numberOfClaims: block.claimantList?.L.length,
-             ...(headerOnly ? {} : { firstClaimant: block.firstClaimant?.S,
-                                     claimantList: block.claimantList?.L,
-                                     block: JSON.parse(block.theBlock.S) }) }
+    return unmarshallBlockForClient (block)
 };
 
+// Subroutine: create a block
+const makeBlockTableEntry = (args) => {
+    return {
+        boardTime: args.boardTime,
+        boardState: args.boardState || {},
+        boardHash: hash(args.boardState || {}),
+        moveList: args.moveList || [],
+        moveListHash: hash(args.moveList || []),
+        previousBlockHash: args.previousBlockHash || ''
+    };
+};
+
+// Subroutine: prepare a block for the client, from a marshalled block table query result
+// Uses the same keys as makeBlockTableEntry
+const unmarshallBlockForClient = (blockItem, headerOnly) => {
+    return { boardId: blockItem.boardId.S,
+             blockHash: blockItem.blockHash.S,
+             blockTime: blockItem.blockTime.N,
+             previousBlockHash: blockItem.previousBlockHash?.S,
+             numberOfClaims: blockItem.claimantList?.L.length,
+             ...(headerOnly ? {} : { firstClaimant: blockItem.firstClaimant?.S,
+                                     claimantList: blockItem.claimantList?.L,
+                                     moveListHash: blockItem.moveListHash?.S,
+                                     boardState: unmarshall(blockItem.theBlock?.M.boardState?.M) }) }
+}
+
 // Subroutine: get clock table entry for a board
-const getClockTableEntry = async (docClient, boardId) => {
+const getClockTableEntry = async (docClient, boardId, queryOpts) => {
     const clockQueryParams = {
         TableName: clockTableName,
         KeyConditionExpression: 'boardId = :id',
         ExpressionAttributeValues: {
             ':id': {S:boardId}
-        }
+        },
+        ...queryOpts || {}
     };
 
     let clockQuery = docClient.send(new QueryCommand(clockQueryParams));
@@ -264,29 +291,13 @@ const addOutgoingMovesToBlock = async (docClient, block, boardId) => {
     return { block, moves, isComplete };
 };
 
-// Subroutine: get a block and (if headerOnly is not true) its outgoing move list
+// Subroutine: get a block and (if headerOnly is not true) its outgoing move list, for client consumption
 const getBlockAndOutgoingMoves = async (docClient, boardId, blockHash, headerOnly) => {
     let block = await getBlock (docClient, boardId, blockHash, headerOnly);
     if (!headerOnly)
         block = await addOutgoingMovesToBlock (docClient, block, boardId);
     return block;
 }
-
-const makeBoardState = (args) => {
-    return { grammar: args.grammar || '',
-             board: stringify(args.board) };
-};
-
-const makeBlockTableEntry = (args) => {
-    return stringify ({
-        boardTime: args.boardTime,
-        boardState: args.boardState || {},
-        boardHash: hash(args.boardState || {}),
-        moveList: args.moveList || [],
-        moveListHash: hash(args.moveList || []),
-        previousBlockHash: args.previousBlockHash || ''
-    });
-};
 
 const makeHandlerForEndpoint = (endpoint) => {
     const handler = async (event) => {
@@ -310,13 +321,11 @@ const makeHandlerForEndpoint = (endpoint) => {
                 if (boardSize & (boardSize - 1))
                     return {
                         statusCode: 400,
-                        body: JSON.stringify({ message: 'Board size must be a power of 2' }),
+                        body: { message: 'Board size must be a power of 2' },
                     };
                 // create the root block, and get the hash of it, but don't store it in the block table yet
-                const boardState = makeBoardState ({ board: { time: time?.toString(),
-                                                              lastEventTime: time?.toString(),
-                                                              seed: seed32 } });
-                const rootBlock = makeBlockTableEntry ({ boardTime: time.toString(), boardState });
+                const boardState = createEmptyBoardState (time, seed32);
+                const rootBlock = makeBlockTableEntry ({ boardTime: time, boardState });
                 const rootBlockHash = hash(rootBlock);
                 // create a clock table entry with this board ID, owned by caller, with lastMoveTime=now, conditional on none existing
                 const clockUpdateParams = {
@@ -328,7 +337,7 @@ const makeHandlerForEndpoint = (endpoint) => {
                         ':owner': callerId,
                         ':boardSize': boardSize,
                         ':rootBlockHash': rootBlockHash,
-                        ':rootBlock': stringify(rootBlock),
+                        ':rootBlock': rootBlock,
                         ':lastMoveTime': time
                     },
                     ReturnValues: 'ALL_NEW'
@@ -359,7 +368,7 @@ const makeHandlerForEndpoint = (endpoint) => {
                 // return the board ID
                 return {
                     statusCode: 200,
-                    body: JSON.stringify({ message: 'Board created', boardId: id, blockHash: rootBlockHash }),
+                    body: { message: 'Board created', boardId: id, blockHash: rootBlockHash },
                 };
 
             case 'GET /boards': {
@@ -378,10 +387,10 @@ const makeHandlerForEndpoint = (endpoint) => {
                 // return the board IDs
                 return {
                     statusCode: 200,
-                    body: JSON.stringify({
+                    body: {
                         message: 'Boards retrieved',
                         boards: clocks.map((clock)=>({boardId:clock?.boardId?.S,lastMoveTime:clock?.lastMoveTime?.S}))
-                    }),
+                    },
                 };
             }
 
@@ -401,13 +410,13 @@ const makeHandlerForEndpoint = (endpoint) => {
                     // return success
                     return {
                         statusCode: 200,
-                        body: JSON.stringify({ message: 'Board deleted' }),
+                        body: { message: 'Board deleted' },
                     };
                 } catch (err) {
                     // if unsuccessful: return an error
                     return {
                         statusCode: 400,
-                        body: JSON.stringify({ message: 'Board deletion failed' }),
+                        body: { message: 'Board deletion failed' },
                         error: err.message
                     };
                 }
@@ -431,11 +440,13 @@ const makeHandlerForEndpoint = (endpoint) => {
                           && currentTimeOnServer <= originallyRequestedUnixTime + MaxMoveDelayMillisecs))
                         return {
                             statusCode: 400,
-                            body: JSON.stringify({ message: 'Move time out of range' }),
+                            body: { message: 'Move time out of range' },
                         };
                     //  - retrieve clock table entry for board. Check permissions. Set requestedTime=max(requestedTime,lastMoveTimeRetrieved+1)
-                    let clock = await getClockTableEntry (docClient, boardId);
- //                   console.warn(JSON.stringify({clock}))
+                    let clock;
+                    try { clock = await getClockTableEntry (docClient, boardId, {ConsistentRead:true}); }
+                    catch (err) { return { statusCode: 404, message: err.message }}
+                    //                   console.warn(JSON.stringify({clock}))
                     // TODO: check permissions
                     requestedBoardTime = bigMax (requestedBoardTime, BigInt(clock?.lastMoveTime?.S) + BigInt(1));
                     //  - update clock table with requested time, conditional on lastMoveTime=lastMoveTimeRetrieved
@@ -479,7 +490,7 @@ const makeHandlerForEndpoint = (endpoint) => {
                         if (BigInt(moveUpdate?.Attributes?.moveTime) === BigInt(newMoveTime))
                             return {
                                 statusCode: 200,
-                                body: JSON.stringify({ message: 'Move posted', moveTime: newMoveTime.toString() }),
+                                body: { message: 'Move posted', moveTime: newMoveTime.toString() },
                             };
                     }
                 }
@@ -487,15 +498,17 @@ const makeHandlerForEndpoint = (endpoint) => {
                 // if move table entry creation failed, return an error
                 return {
                     statusCode: 400,
-                    body: JSON.stringify({ message: 'Move creation failed' }),
+                    body: { message: 'Move creation failed' },
                 };
             }
         
             case 'GET /boards/{id}/blocks/{hash}': {
-                const block = await getBlockAndOutgoingMoves (docClient, boardId, blockHash, headerOnly);
+                let block;
+                try { block = await getBlockAndOutgoingMoves (docClient, boardId, blockHash, headerOnly); }
+                catch (err) { return { statusCode: 404, message: err.message }}
                 return {
                     statusCode: 200,
-                    body: JSON.stringify(block),
+                    body: block,
                 };
             }
 
@@ -503,14 +516,16 @@ const makeHandlerForEndpoint = (endpoint) => {
                 // TODO: verify that block fits JSON schema for a block
                 const { previousBlockHash, moveListHash, boardTime, boardState } = event.body;
                 // get clock table entry for board, and verify that board size matches
-                let clock = await getClockTableEntry (docClient, boardId);
+                let clock;
+                try { clock = await getClockTableEntry (docClient, boardId); }
+                catch (err) { return { statusCode: 404, message: err.message }}
                 // get previous block from block table, and its outgoing moves
                 const previousBlock = await getBlockAndOutgoingMoves (docClient, boardId, previousBlockHash, false);
                 // verify that move list is complete, and that its hash matches the update
                 if (!previousBlock.isComplete || hash(previousBlock.moves) !== moveListHash)
                     return {
                         statusCode: 400,
-                        body: JSON.stringify({ message: 'Move list mismatch' }),
+                        body: { message: 'Move list mismatch' },
                     };
                 // verify that block time is as determined by previous block + move list
                 const timesMatch = (previousBlock.moves?.length === MaxOutgoingMovesForBlock
@@ -520,7 +535,7 @@ const makeHandlerForEndpoint = (endpoint) => {
                 if (!timesMatch)
                     return {
                         statusCode: 400,
-                        body: JSON.stringify({ message: 'Block time mismatch' }),
+                        body: { message: 'Block time mismatch' },
                     };
                 // since all checks pass, create a block table entry with this board ID and hash, attributed to caller, conditional on none existing
                 // increment the previous block's predecessorCount count
@@ -561,7 +576,7 @@ const makeHandlerForEndpoint = (endpoint) => {
                 // return success
                 return {
                     statusCode: 200,
-                    body: JSON.stringify({ message: 'Block created', blockHash }),
+                    body: { message: 'Block created', blockHash },
                 };
             }
 
@@ -581,28 +596,24 @@ const makeHandlerForEndpoint = (endpoint) => {
                     let blocks = blockQueryResult.Items || [];
                     if (!blocks.length)
                         return {
-                            statusCode: 400,
-                            body: JSON.stringify({ message: 'No blocks found' }),
+                            statusCode: 404,
+                            body: { message: 'No blocks found' },
                         };
-                    console.warn(JSON.stringify({blocks}))
+//                    console.warn(JSON.stringify({blocks}))
                     //  of all blocks with the most recent timestamp, pick the one with the highest confirmation count
                     blocks = blocks.filter ((block) => block.blockTime.N === blocks[0].blockTime.N);
                     blocks = blocks.sort ((a,b) => b.claimantList.L.length - a.claimantList.L.length);
-                    const block = JSON.parse (blocks[0].theBlock.S);
-                    const minimalBlock = { blockHash: blocks[0].blockHash.S,
-                                           blockTime: blocks[0].blockTime.N,
-                                           moveListHash: block.moveListHash,
-                                           boardState: block.boardState };
+                    const bestBlock = blocks[0];
+                    if (!bestBlock)
+                        return { statusCode: 404, message: 'Block not found' }
+                    console.warn({bestBlock})
+                    const minimalBlock = unmarshallBlockForClient (bestBlock)
                     // add outgoing moves
                     let result;
-                    if (block)
-                        result = await addOutgoingMovesToBlock (docClient, minimalBlock, boardId);
-                    else
-                        result = { block, moves: [] }
-                    return {
-                            statusCode: 200,
-                            body: JSON.stringify(result),
-                    };
+                    try { let body = await addOutgoingMovesToBlock (docClient, minimalBlock, boardId); result = { statusCode: 200, body } }
+                    catch (err) { result = { statusCode: 404, message: err.message }}
+                    console.warn({result})
+                    return result;
             
                 case 'GET /boards/{id}/moves':
                     //  retrieve moves subsequent to specified time (up to a max of maxOutgoingMovesForBlock)
@@ -619,7 +630,7 @@ const makeHandlerForEndpoint = (endpoint) => {
                     const moves = moveQueryResults.Items || [];
                     return {
                         statusCode: 200,
-                        body: JSON.stringify({moves}),
+                        body: {moves},
                     };
         
                 default:
@@ -629,12 +640,12 @@ const makeHandlerForEndpoint = (endpoint) => {
         if (result)
             return {
                 statusCode: 200,
-                body: JSON.stringify(result),
+                body: result,
             };
 
         return {
             statusCode: 400,
-            body: JSON.stringify({ message: 'Board state request failed' }),
+            body: { message: 'Board state request failed' },
         };
     };
     return handler;
