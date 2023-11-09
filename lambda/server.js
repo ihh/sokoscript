@@ -50,7 +50,7 @@ else {
             body: req.body,
             requestContext: { identity: { cognitoIdentityId: userId } }
         }).then ((result) => res.status(result.statusCode).json(result))
-        .catch ((err) => { console.warn(err); res.json({ status: 500, message: 'Error in handler', error: err[errorMessageProp] }).status(500).end() });
+        .catch ((err) => { console.warn(err); res.status(500).json({ statusCode: 500, message: 'Error in handler: ' + err[errorMessageProp] }).end() });
     }};
     // make a pseudo-API Gateway express server that routes all supported paths in boards.js to the handler
     const app = express();

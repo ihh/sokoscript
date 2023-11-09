@@ -13,9 +13,15 @@ const listTables = () => {
     exec (`aws dynamodb list-tables --endpoint-url ${endpoint} --no-cli-pager`)
 }
 
+const deleteTables = () => {
+    exec (`aws dynamodb delete-table --endpoint-url ${endpoint} --no-cli-pager --table-name soko-clocks`)
+    exec (`aws dynamodb delete-table --endpoint-url ${endpoint} --no-cli-pager --table-name soko-blocks`)
+    exec (`aws dynamodb delete-table --endpoint-url ${endpoint} --no-cli-pager --table-name soko-moves`)
+}
+
 // parse command-line options
 const defaultEndpoint = 'http://localhost:8000';
-const commands = ['list-tables','create-tables','delete-tables','scan'];
+const commands = ['list-tables','create-tables','delete-tables','reset-tables','scan'];
 const opt = getopt.create([
   ['e' , 'endpoint=URL'    , `specify AWS DynamoDB endpoint URL (default ${defaultEndpoint})`],
   ['c' , 'command=COMMAND' , `specify command (options: ${commands.join(', ')})`],
@@ -33,14 +39,16 @@ switch (command) {
         listTables();
         break
     case 'delete-tables':
-        exec (`aws dynamodb delete-table --endpoint-url ${endpoint} --no-cli-pager --table-name soko-clocks`)
-        exec (`aws dynamodb delete-table --endpoint-url ${endpoint} --no-cli-pager --table-name soko-blocks`)
-        exec (`aws dynamodb delete-table --endpoint-url ${endpoint} --no-cli-pager --table-name soko-moves`)
+        deleteTables();
         listTables();
         break
     case 'create-tables':
-        createTables (endpoint).then (listTables);
+        createTables(endpoint).then (listTables);
         break;
+    case 'reset-tables':
+        deleteTables();
+        createTables(endpoint).then (listTables);
+        break
     case 'scan':
         exec (`aws dynamodb scan --endpoint-url ${endpoint} --table-name ${table}`)
         break

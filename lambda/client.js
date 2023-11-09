@@ -23,10 +23,10 @@ const opt = getopt.create([
   ['m' , 'method=METHOD' , `specify method (options ${methods.join(', ')}; default ${defaultMethod})`],
   ['r' , 'route=ROUTE'   , `specify route (options ${routes.join(', ')}; default ${defaultRoute})`],
   ['b' , 'board=ID'      , 'specify board ID'],
-  ['H' , 'block=HASH'    , 'specify block hash'],
+  ['H' , 'hash=HASH'     , 'specify block hash of previous block (for POST blocks) or current block (for GET blocks)'],
   ['s' , 'size=N'        , `specify boardSize (for POST boards); default ${defaultBoardSize}`],
   ['t' , 'time=T'        , 'specify ?since=T in ms (for GET moves), move time in ms (for POST moves), or block time in ticks (for POST blocks)'],
-  ['M' , 'moves=LIST'    , 'specify JSON move list (for POST blocks)'],
+  ['M' , 'moves=LIST'    , 'specify JSON move (for POST moves) or move list (for POST blocks)'],
   ['S' , 'state=JSON'    , 'specify board state (for POST blocks)'],
   ['v' , 'verbose'       , 'log web traffic'],
   ['h' , 'help'          , 'display this help message']
@@ -37,6 +37,7 @@ const opt = getopt.create([
 let argvIdx = 0;
 const moreArgs = () => argvIdx < opt.argv.length;
 const gotArg = (optName) => opt.options[optName] || moreArgs();
+const getArg = (optName, defaultVal) => opt.options[optName] || defaultVal;
 const nextArg = (optName, defaultVal) => opt.options[optName] || (moreArgs() && opt.argv[argvIdx++]) || defaultVal;
 const needArg = (optName) => {
     const arg = opt.options[optName];
@@ -64,7 +65,7 @@ switch (routeKey) {
         break
     case 'POST /moves':
         route = '/boards/' + nextArg('id') + '/moves'
-        config.body = { time: nextArg('time',Date.now()) }
+        config.body = { time: getArg('time',Date.now()), move: JSON.parse(nextArg('moves')) }
         break
     case 'GET /moves':
         route = '/boards/' + nextArg('id') + '/moves'
@@ -74,12 +75,12 @@ switch (routeKey) {
     case 'POST /blocks':
         route = '/boards/' + nextArg('id') + '/blocks'
         config.body = { previousBlockHash: needArg('hash'),
-                        moveListHash: hexMD5(stringify(opt.options.moves || [])),
+                        moveListHash: hexMD5(stringify(JSON.parse(opt.options.moves || '[]'))),
                         boardTime: needArg('time'),
                         boardState: opt.options.boardState || '' }
         break
     case 'GET /blocks':
-        route = '/boards/' + nextArg('id') + '/blocks/' + needArg('hash')
+        route = '/boards/' + nextArg('id') + '/blocks/' + nextArg('hash')
         break
     case 'GET /state':
         route = '/boards/' + nextArg('id') + '/state'
@@ -96,5 +97,5 @@ if (config.body)
     console.warn ("Status: " + result.status)
     return result.json()
  }).then ((json) => {
-    console.log (json.body || json)
+    console.log (JSON.stringify(json.body || json))
 })
