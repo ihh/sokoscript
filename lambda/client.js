@@ -29,6 +29,7 @@ const opt = getopt.create([
   ['M' , 'moves=LIST'    , 'specify JSON move (for POST moves) or move list (for POST blocks)'],
   ['S' , 'state=JSON'    , 'specify board state (for POST blocks)'],
   ['q' , 'header'        , 'specify ?headerOnly=1 (for GET blocks)'],
+  ['R' , 'repeat=N'      , 'repeat the exact same web service call N times'],
   ['v' , 'verbose'       , 'log web traffic'],
   ['h' , 'help'          , 'display this help message']
 ])              // create Getopt instance
@@ -39,7 +40,12 @@ let argvIdx = 0;
 const moreArgs = () => argvIdx < opt.argv.length;
 const gotArg = (optName) => opt.options[optName] || moreArgs();
 const getArg = (optName, defaultVal) => opt.options[optName] || defaultVal;
-const nextArg = (optName, defaultVal) => opt.options[optName] || (moreArgs() && opt.argv[argvIdx++]) || defaultVal;
+const nextArg = (optName, defaultVal) => {
+    const arg = opt.options[optName] || (moreArgs() && opt.argv[argvIdx++]) || defaultVal;
+    if (!arg)
+        throw new Error (`Missing required command-line argument or option: ${optName}`);
+    return arg;
+}
 const needArg = (optName) => {
     const arg = opt.options[optName];
     if (typeof(arg) === 'undefined')
@@ -91,12 +97,15 @@ switch (routeKey) {
         process.exit()
 }
 if (config.body)
-    config.body = JSON.stringify (config.body)
+    config.body = JSON.stringify (config.body);
 
+for (let n = 0; n < (opt.options.repeat || 1); ++n) {
+    const tag = opt.options.repeat ? ` [${n+1}] ` : '';
     Fetch (url + route, config)
- .then ((result) => {
-    console.warn ("Status: " + result.status)
-    return result.json()
- }).then ((json) => {
-    console.log (JSON.stringify(json.body || json))
-})
+    .then ((result) => {
+        console.warn (`Status${tag}: ${result.status}`)
+        return result.json()
+    }).then ((json) => {
+        console.log (tag + JSON.stringify(json.body || json))
+    })
+}

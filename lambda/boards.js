@@ -1,22 +1,21 @@
 // AWS SDK
 import { DynamoDBClient, CreateTableCommand, DeleteTableCommand, QueryCommand, DeleteItemCommand } from "@aws-sdk/client-dynamodb";
-import { DynamoDBDocumentClient, UpdateCommand } from "@aws-sdk/lib-dynamodb";
+import { DynamoDBDocumentClient, UpdateCommand, PutCommand } from "@aws-sdk/lib-dynamodb";
 import { unmarshall } from "@aws-sdk/util-dynamodb";
 
 // Global parameters
 const MaxOutgoingMovesForBlock = 100;
-const MaxTimeInSecondsBetweenBlocks = 600;
+const TimeInSecondsBetweenBlocks = 600;
+const TimeInSecondsBeforeBlockUpdateAllowed = 10;
 
 const MaxMoveAnticipationMillisecs = 100;
 const MaxMoveDelayMillisecs = 250;
 
-const BlockTicksPerSecond = BigInt(Math.pow(2,32));
-const MaxTicksBetweenBlocks = BigInt(MaxTimeInSecondsBetweenBlocks) * BlockTicksPerSecond;
+const MaxMoveRetries = 3;
 
-const MaxClockUpdateRetries = 3;
-const MaxMoveUpdateRetries = 10;
-const MaxMoveQueryRetries = 3;
-const MaxMoveQueryRetryDelay = 100;
+const BlockTicksPerSecond = BigInt(Math.pow(2,32));
+const TicksBetweenBlocks = BigInt(TimeInSecondsBetweenBlocks) * BlockTicksPerSecond;
+const TicksBeforeUpdate = BigInt(TimeInSecondsBeforeBlockUpdateAllowed) * BlockTicksPerSecond;
 
 const createEmptyBoardState = (time, seed) => ({ grammar: '',
                                                  board: { time: time.toString(),
@@ -27,7 +26,6 @@ const createEmptyBoardState = (time, seed) => ({ grammar: '',
 // Each clock defines a board, whose state is updated by moves, whose accumulation is reflected in blocks.
 // Blocks are not guaranteed to be correct (their computations of evolving/modified state are not verified before storage),
 // but they are guaranteed to be consistent with the clock and move tables.
-// Clock tables include various denormalized summaries of moves, including the last move time and the current rules and permissions.
 const clockTableName = 'soko-clocks';
 const moveTableName = 'soko-moves';
 const blockTableName = 'soko-blocks';
@@ -103,14 +101,14 @@ const createTables = async (endpoint) => {
         AttributeDefinitions: [
             { AttributeName: 'boardId', AttributeType: 'S' },
             { AttributeName: 'boardOwner', AttributeType: 'S' },
-            { AttributeName: 'lastMoveTime', AttributeType: 'N' },
+            { AttributeName: 'boardTimeAtCreation', AttributeType: 'N' },
         ],
         GlobalSecondaryIndexes: [
             {
-                IndexName: 'boardOwner-lastMoveTime-index',
+                IndexName: 'boardOwner-boardTimeAtCreation-index',
                 KeySchema: [
                     { AttributeName: 'boardOwner', KeyType: 'HASH' },
-                    { AttributeName: 'lastMoveTime', KeyType: 'RANGE' }
+                    { AttributeName: 'boardTimeAtCreation', KeyType: 'RANGE' }
                 ],
                 Projection: {
                     ProjectionType: 'ALL'
@@ -238,42 +236,14 @@ const unmarshallBlockForClient = (blockItem, headerOnly) => {
                               previousBlockHash: block.previousBlockHash.S } }) }
 }
 
-// Subroutine: get clock table entry for a board
-const getClockTableEntry = async (docClient, boardId, queryOpts) => {
-    const clockQueryParams = {
-        TableName: clockTableName,
-        KeyConditionExpression: 'boardId = :id',
-        ExpressionAttributeValues: {
-            ':id': {S:boardId}
-        },
-        ...queryOpts || {}
-    };
-
-    let clockQuery = docClient.send(new QueryCommand(clockQueryParams));
-    let clockResult = await clockQuery;
-//    console.warn(JSON.stringify({clockQuery,clockResult}))
-    if (clockResult.Items?.length !== 1)
-        throw new Error ('Clock not found');
-    return clockResult.Items[0];
-};
-
 // Subroutine: get outgoing move list for a block, and indicate whether this move list is complete
 const addOutgoingMovesToBlockWrapper = async (docClient, wrapper) => {
     if (!wrapper?.block)
         throw new Error ('Block not found');
-    const clock = await getClockTableEntry (docClient, wrapper.boardId);
-    if (!clock)
-        throw new Error ('Clock not found');
-    console.warn({wrapper,clock})
     const blockTime = BigInt (wrapper.block.boardTime);
-    const lastMoveTimeViaClock = BigInt(clock.lastMoveTime.N);
-    let latestMoveTimeForBlock = blockTime + MaxTicksBetweenBlocks;  // moves up to and including this time will be allowed
-    let expectedLastMoveTime, blockTimedOut = false;
-    if (latestMoveTimeForBlock > lastMoveTimeViaClock) {
-        latestMoveTimeForBlock = lastMoveTimeViaClock;  // avoid retrieving moves that weren't yet reflected in the clock table when we queried it
-        expectedLastMoveTime = lastMoveTimeViaClock?.toString();
-    } else  // lastMoveTime >= maxMoveTime
-        blockTimedOut = true;
+    const nextBlockTime = blockTime + TicksBetweenBlocks;  // moves up to and including this time will be allowed
+    const earliestPostTimeForBlock = nextBlockTime + TicksBeforeUpdate;
+    const currentBoardTime = BigInt(Date.now()) * BlockTicksPerSecond / 1000n;
 
     // query move table
     const moveQueryParams = {
@@ -287,24 +257,18 @@ const addOutgoingMovesToBlockWrapper = async (docClient, wrapper) => {
         ExpressionAttributeValues: {
             ':id': {S:wrapper.boardId},
             ':lastBlockTime': {N:blockTime.toString()},
-            ':maxMoveTime': {N:(latestMoveTimeForBlock+BigInt(1)).toString()}
+            ':maxMoveTime': {N:(nextBlockTime+BigInt(1)).toString()}
         },
         ConsistentRead: true
     };
 
-    // allow several retries just in case we try to fetch a move in between when the clock and move tables are updated
-    let moves, moveQuerySuccess = false;
-    for (let moveQueryTry = 0; !moveQuerySuccess && moveQueryTry < MaxMoveQueryRetries; ++moveQueryTry) {
-        let moveResult = await docClient.send(new QueryCommand(moveQueryParams));
-        moves = moveResult.Items;
-//    console.warn(JSON.stringify({moves,expectedLastMoveTime}))
-        moveQuerySuccess == moves && (typeof(expectedLastMoveTime) === 'undefined' || (moves?.length && moves[moves.length-1]?.moveTime.N === expectedLastMoveTime));
-        if (!moveQuerySuccess)
-            await timeout(Math.random() * MaxMoveQueryRetryDelay);
-    }
+    const moveResult = await docClient.send(new QueryCommand(moveQueryParams));
+    const moves = moveResult.Items;
+    if (!moves)
+        throw new Error ('Move query failed');
 
-    const isComplete = blockTimedOut || (moveResult.Items.length === MaxOutgoingMovesForBlock);
-    return { ...wrapper, moves: moves.map(unmarshallMove), isComplete, ...isComplete ? {nextBlockTime:blockTimedOut?latestMoveTimeForBlock.toString():expectedLastMoveTime} : {} };
+    const ready = currentBoardTime >= earliestPostTimeForBlock;
+    return { ...wrapper, moves: moves.map(unmarshallMove), nextBlockTime: nextBlockTime.toString(), ready };
 };
 
 const unmarshallMove = ((m) => ({
@@ -323,9 +287,9 @@ const getBlockAndOutgoingMoves = async (docClient, boardId, blockHash, headerOnl
 
 // strip out unnecessary stuff for /state
 const convertBlockWrapperToStateWrapper = (wrapper) => {
-    const { boardId, blockHash, block, moves, isComplete, nextBlockTime } = wrapper;
+    const { boardId, blockHash, block, moves, ready, nextBlockTime } = wrapper;
     const { boardTime, boardState, previousBlockHash } = block;
-    return { boardId, blockHash, previousBlockHash, boardTime, boardState, moves, isComplete, ...isComplete ? {nextBlockTime} : {} };
+    return { boardId, blockHash, previousBlockHash, boardTime, boardState, moves, ready, nextBlockTime };
 }
 
 const makeHandlerForEndpoint = (endpoint) => {
@@ -355,18 +319,18 @@ const makeHandlerForEndpoint = (endpoint) => {
                 const boardState = createEmptyBoardState (time, seed32);
                 const rootBlock = makeBlockTableEntry ({ boardTime: time, boardState });
                 const rootBlockHash = hash(rootBlock);
-                // create a clock table entry with this board ID, owned by caller, with lastMoveTime=now, conditional on none existing
+                // create a clock table entry with this board ID, owned by caller, conditional on none existing
                 const clockUpdateParams = {
                     TableName: clockTableName,
                     Key: { boardId: id },
                     ConditionExpression: 'attribute_not_exists(boardId)',
-                    UpdateExpression: 'set boardOwner=:owner, boardSize=:boardSize, rootBlockHash=:rootBlockHash, rootBlock=:rootBlock, lastMoveTime=:lastMoveTime',
+                    UpdateExpression: 'set boardOwner=:owner, boardSize=:boardSize, rootBlockHash=:rootBlockHash, rootBlock=:rootBlock, boardTimeAtCreation=:boardTimeAtCreation',
                     ExpressionAttributeValues: {
                         ':owner': callerId,
                         ':boardSize': boardSize,
                         ':rootBlockHash': rootBlockHash,
                         ':rootBlock': rootBlock,
-                        ':lastMoveTime': time
+                        ':boardTimeAtCreation': time
                     },
                     ReturnValues: 'ALL_NEW'
                 }
@@ -400,10 +364,10 @@ const makeHandlerForEndpoint = (endpoint) => {
                 };
 
             case 'GET /boards': {
-                // query the clock table for all boards using optional query parameter filter (owner=), sorted by lastMoveTime (most recent first)
+                // query the clock table for all boards using optional query parameter filter (owner=), sorted by boardTimeAtCreation (most recent first)
                 const clockQueryParams = {
                     TableName: clockTableName,
-                    IndexName: 'boardOwner-lastMoveTime-index',
+                    IndexName: 'boardOwner-boardTimeAtCreation-index',
                     KeyConditionExpression: 'boardOwner = :owner',
                     ExpressionAttributeValues: {
                         ':owner': {S:callerId}
@@ -417,7 +381,7 @@ const makeHandlerForEndpoint = (endpoint) => {
                     statusCode: 200,
                     body: {
                         message: 'Boards retrieved',
-                        boards: clocks.map((clock)=>({boardId:clock?.boardId?.S,lastMoveTime:clock?.lastMoveTime?.S}))
+                        boards: clocks.map((clock)=>({boardId:clock?.boardId?.S,boardTimeAtCreation:clock?.boardTimeAtCreation?.N}))
                     },
                 };
             }
@@ -455,85 +419,52 @@ const makeHandlerForEndpoint = (endpoint) => {
                 const requestedUnixTime = parseInt (event.body?.time);
                 const move = event.body?.move;
                 // TODO: verify that move fits JSON schema for a move
-                const originallyRequestedUnixTime = requestedUnixTime;
-                let requestedBoardTime = BigInt(requestedUnixTime) * BlockTicksPerSecond / 1000n;
-                // Retry up to rnd(MaxMoveRetries) times:
-                const moveRetries = Math.floor(Math.random()*MaxClockUpdateRetries);
-                let retry = 0, newMoveTime = false, success = false;
-                for (retry = 0; retry <= moveRetries && !newMoveTime; ++retry) {
-                    const currentTimeOnServer = Date.now();
-                    //  - check that originallyRequestedTime - maxMoveAnticipation <= currentTimeOnServer <= originallyRequestedTime + maxMoveDelay
-                    //    if it isn't, return an error
-                    if (!(originallyRequestedUnixTime - MaxMoveAnticipationMillisecs <= currentTimeOnServer
-                          && currentTimeOnServer <= originallyRequestedUnixTime + MaxMoveDelayMillisecs))
-                        return {
-                            statusCode: 400,
-                            body: { message: 'Move time out of range' },
-                        };
-                    //  - retrieve clock table entry for board. Check permissions. Set requestedTime=max(requestedTime,lastMoveTimeRetrieved+1)
-                    let clock;
-                    try { clock = await getClockTableEntry (docClient, boardId, {ConsistentRead:true}); }
-                    catch (err) { return { statusCode: 404, message: err.message }}
-                    //                   console.warn(JSON.stringify({clock}))
-                    // TODO: check permissions
-                    console.warn({clock})
-                    requestedBoardTime = bigMax (requestedBoardTime, BigInt(clock?.lastMoveTime?.N) + BigInt(1));
-                    //  - update clock table with requested time, conditional on lastMoveTime=lastMoveTimeRetrieved
-                    const clockUpdateParams = {
-                        TableName: clockTableName,
-                        Key: { boardId: boardId },
-                        ConditionExpression: 'lastMoveTime = :lastMoveTime',
-                        UpdateExpression: 'set lastMoveTime=:requestedTime',
-                        ExpressionAttributeValues: {
-                            ':requestedTime': requestedBoardTime,
-                            ':lastMoveTime': BigInt(clock?.lastMoveTime?.N)
-                        },
-                        ReturnValues: 'UPDATED_NEW'
+                const currentTimeOnServer = Date.now();
+                //  - check that originallyRequestedTime - maxMoveAnticipation <= currentTimeOnServer <= originallyRequestedTime + maxMoveDelay
+                //    if it isn't, return an error
+                if (!(requestedUnixTime - MaxMoveAnticipationMillisecs <= currentTimeOnServer
+                        && currentTimeOnServer <= requestedUnixTime + MaxMoveDelayMillisecs))
+                    return {
+                        statusCode: 400,
+                        body: { message: 'Move time out of range' },
                     };
-                    let clockUpdate = await docClient.send(new UpdateCommand(clockUpdateParams));
-//                    console.warn({clockUpdate})
-                    if (BigInt(clockUpdate?.Attributes?.lastMoveTime) === requestedBoardTime)
-                        newMoveTime = requestedBoardTime;
-                }
-                // if clock table update succeeded...
-                if (newMoveTime) {
-                    //  - create a move table entry with this board ID, requestedTime, and originallyRequestedTime, attributed to caller
-                    const moveUpdateParams = {
+                let moveTime = BigInt(requestedUnixTime) * BlockTicksPerSecond / 1000n;
+                let movePut = false, retry;
+                for (retry = 0; !movePut && retry < MaxMoveRetries; ++retry) {
+                    //  - create a move table entry with this board ID and moveTime, attributed to caller
+                    const movePutParams = {
                         TableName: moveTableName,
-                        Key: { boardId: boardId, moveTime: newMoveTime },
-                        ConditionExpression: 'attribute_not_exists(boardId)',
-                        UpdateExpression: 'set mover=:caller, reqTime=:origTime, move=:move',
-                        ExpressionAttributeValues: {
-                            ':caller': callerId,
-                            ':origTime': originallyRequestedUnixTime,
-                            ':move': move
-                        },
-                        ReturnValues: 'ALL_NEW'
+                        Item: { boardId, moveTime, mover: callerId, move },
+                        ConditionExpression: 'attribute_not_exists(boardId)'
                     };
-//                    console.warn({moveUpdateParams})
-                    for (let moveRetry = 0; moveRetry < MaxMoveUpdateRetries; ++moveRetry) {
-                        //  - retry persistently until move table entry is created
-                        const moveUpdate = await docClient.send (new UpdateCommand(moveUpdateParams));
-//                        console.warn({moveUpdate})
-                        if (BigInt(moveUpdate?.Attributes?.moveTime) === BigInt(newMoveTime))
-                            return {
-                                statusCode: 200,
-                                body: { message: 'Move posted', moveTime: newMoveTime.toString() },
-                            };
+                    try {
+                        movePut = await docClient.send (new PutCommand(movePutParams));
+                    } catch (err) {
+                        console.warn({err})
                     }
+                    console.warn({movePut})
+                    if (!movePut)
+                        ++moveTime;
                 }
+
+                console.log({movePut})
+                if (movePut)
+                    return {
+                        statusCode: 200,
+                        body: { message: 'Move posted', moveTime: moveTime.toString() },
+                    };
 
                 // if move table entry creation failed, return an error
                 return {
                     statusCode: 400,
-                    body: { message: 'Move creation failed' },
+                    body: { message: 'Move failed' },
                 };
             }
         
             case 'GET /boards/{id}/blocks/{hash}': {
                 let block;
                 try { block = await getBlockAndOutgoingMoves (docClient, boardId, blockHash, event.queryParameters?.headerOnly); }
-                catch (err) { return { statusCode: 404, message: err.message }}
+                catch (err) { return { statusCode: 404, body: { message: err.message } }}
                 return {
                     statusCode: 200,
                     body: block,
@@ -543,15 +474,15 @@ const makeHandlerForEndpoint = (endpoint) => {
             case 'POST /boards/{id}/blocks': {
                 // TODO: verify that block fits JSON schema for a block
                 const { previousBlockHash, moveListHash, boardTime, boardState } = event.body;
-                // get clock table entry for board, and verify that board size matches
-                let clock;
-                try { clock = await getClockTableEntry (docClient, boardId); }
-                catch (err) { return { statusCode: 404, message: err.message }}
                 // get previous block from block table, and its outgoing moves
                 const previousBlock = await getBlockAndOutgoingMoves (docClient, boardId, previousBlockHash, false);
-                // verify that move list is complete, and that its hash matches the update
-                console.warn(JSON.stringify({previousBlock,moveListHash}))
-                if (!previousBlock.isComplete || hash(previousBlock.moves) !== moveListHash)
+                // verify that block is ready for update, and that its move list hash matches the update
+                if (!previousBlock.ready)
+                    return {
+                        statusCode: 400,
+                        body: { message: 'Block not ready' },
+                    };
+                if (hash(previousBlock.moves) !== moveListHash)
                     return {
                         statusCode: 400,
                         body: { message: 'Move list mismatch' },
@@ -608,62 +539,62 @@ const makeHandlerForEndpoint = (endpoint) => {
             }
 
             case 'GET /boards/{id}/state':
-                    //  search the block table for all blocks for this board, sorted by time of creation (most recent first)
-                    const blockQueryParams = {
-                        TableName: blockTableName,
-                        IndexName: 'boardId-blockTime-index',
-                        KeyConditionExpression: 'boardId = :id',
-                        ExpressionAttributeValues: {
-                            ':id': {S:boardId}
-                        },
-                        ScanIndexForward: false
-                    };
-                    const blockQueryResult = await docClient.send(new QueryCommand(blockQueryParams));
-                    console.warn({blockQueryResult})
-                    let blocks = blockQueryResult.Items || [];
-                    if (!blocks.length)
-                        return {
-                            statusCode: 404,
-                            body: { message: 'No blocks found' },
-                        };
-//                    console.warn(JSON.stringify({blocks}))
-                    //  of all blocks with the most recent timestamp, pick the one with the highest confirmation count
-                    blocks = blocks.filter ((block) => block.blockTime.N === blocks[0].blockTime.N);
-                    blocks = blocks.sort ((a,b) => b.claimantList.L.length - a.claimantList.L.length);
-                    const bestBlock = blocks[0];
-                    if (!bestBlock)
-                        return { statusCode: 404, message: 'Block not found' }
-                    console.warn(JSON.stringify({bestBlock}))
-                    const wrapper = unmarshallBlockForClient (bestBlock, false)
-                    // add outgoing moves
-                    let result;
-                    try { let body = convertBlockWrapperToStateWrapper (await addOutgoingMovesToBlockWrapper (docClient, wrapper, boardId)); result = { statusCode: 200, body } }
-                    catch (err) { result = { statusCode: 404, message: err.message }}
-                    console.warn({result})
-                    return result;
-            
-                case 'GET /boards/{id}/moves':
-                    //  retrieve moves subsequent to specified time (up to a max of maxOutgoingMovesForBlock)
-                    if (typeof(event.queryParameters?.since) === 'undefined')
-                        return { statusCode: 400, message: 'No "since" time parameter specified' }
-                    const moveQueryParams = {
-                        TableName: moveTableName,
-                        KeyConditionExpression: 'boardId = :id and moveTime > :since',
-                        ExpressionAttributeValues: {
-                            ':id': {S:boardId},
-                            ':since': {N:(event.queryParameters?.since).toString()}
-                        },
-                        Limit: MaxOutgoingMovesForBlock
-                    };
-                    const moveQueryResults = await docClient.send(new QueryCommand(moveQueryParams));
-                    const moves = moveQueryResults.Items || [];
+                //  search the block table for all blocks for this board, sorted by time of creation (most recent first)
+                const blockQueryParams = {
+                    TableName: blockTableName,
+                    IndexName: 'boardId-blockTime-index',
+                    KeyConditionExpression: 'boardId = :id',
+                    ExpressionAttributeValues: {
+                        ':id': {S:boardId}
+                    },
+                    ScanIndexForward: false
+                };
+                const blockQueryResult = await docClient.send(new QueryCommand(blockQueryParams));
+                console.warn({blockQueryResult})
+                let blocks = blockQueryResult.Items || [];
+                if (!blocks.length)
                     return {
-                        statusCode: 200,
-                        body: {moves: moves.map(unmarshallMove)},
+                        statusCode: 404,
+                        body: { message: 'No blocks found' },
                     };
-        
-                default:
-                    break;
+//                    console.warn(JSON.stringify({blocks}))
+                //  of all blocks with the most recent timestamp, pick the one with the highest confirmation count
+                blocks = blocks.filter ((block) => block.blockTime.N === blocks[0].blockTime.N);
+                blocks = blocks.sort ((a,b) => b.claimantList.L.length - a.claimantList.L.length);
+                const bestBlock = blocks[0];
+                if (!bestBlock)
+                    return { statusCode: 404, body: { message: 'Block not found' } }
+                console.warn(JSON.stringify({bestBlock}))
+                const wrapper = unmarshallBlockForClient (bestBlock, false)
+                // add outgoing moves
+                let result;
+                try { let body = convertBlockWrapperToStateWrapper (await addOutgoingMovesToBlockWrapper (docClient, wrapper, boardId)); result = { statusCode: 200, body } }
+                catch (err) { result = { statusCode: 404, body: { message: err.message }} }
+                console.warn({result})
+                return result;
+            
+            case 'GET /boards/{id}/moves':
+                //  retrieve moves subsequent to specified time (up to a max of maxOutgoingMovesForBlock)
+                if (typeof(event.queryParameters?.since) === 'undefined')
+                    return { statusCode: 400, body: { message: 'No "since" time parameter specified' } }
+                const moveQueryParams = {
+                    TableName: moveTableName,
+                    KeyConditionExpression: 'boardId = :id and moveTime > :since',
+                    ExpressionAttributeValues: {
+                        ':id': {S:boardId},
+                        ':since': {N:(event.queryParameters?.since).toString()}
+                    },
+                    Limit: MaxOutgoingMovesForBlock
+                };
+                const moveQueryResults = await docClient.send(new QueryCommand(moveQueryParams));
+                const moves = moveQueryResults.Items || [];
+                return {
+                    statusCode: 200,
+                    body: {moves: moves.map(unmarshallMove)},
+                };
+    
+            default:
+                break;
         }
 
         if (result)
