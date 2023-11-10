@@ -2,20 +2,21 @@
 import { DynamoDBClient, CreateTableCommand, DeleteTableCommand, QueryCommand, DeleteItemCommand } from "@aws-sdk/client-dynamodb";
 import { DynamoDBDocumentClient, UpdateCommand } from "@aws-sdk/lib-dynamodb";
 import { unmarshall } from "@aws-sdk/util-dynamodb";
-import e from "express";
 
 // Global parameters
 const MaxOutgoingMovesForBlock = 100;
 const MaxTimeInSecondsBetweenBlocks = 600;
 
-const MaxMoveAnticipationMillisecs = 250;
+const MaxMoveAnticipationMillisecs = 100;
 const MaxMoveDelayMillisecs = 250;
 
 const BlockTicksPerSecond = BigInt(Math.pow(2,32));
 const MaxTicksBetweenBlocks = BigInt(MaxTimeInSecondsBetweenBlocks) * BlockTicksPerSecond;
 
-const MaxMoveRetries = 3;
-const MaxMoveTableRetries = 10;
+const MaxClockUpdateRetries = 3;
+const MaxMoveUpdateRetries = 10;
+const MaxMoveQueryRetries = 3;
+const MaxMoveQueryRetryDelay = 100;
 
 const createEmptyBoardState = (time, seed) => ({ grammar: '',
                                                  board: { time: time.toString(),
@@ -70,6 +71,9 @@ const hash = (obj) => md5(stringify(obj));
 
 // BigInt max
 const bigMax = (...args) => args.reduce((m, e) => e > m ? e : m);
+
+// timeout Promise
+const timeout = (ms) => new Promise(resolve => setTimeout(resolve, ms));
 
 // Subroutine: delete clock, move, and block tables
 const deleteTables = async (endpoint) => {
@@ -284,14 +288,20 @@ const addOutgoingMovesToBlockWrapper = async (docClient, wrapper) => {
             ':id': {S:wrapper.boardId},
             ':lastBlockTime': {N:blockTime.toString()},
             ':maxMoveTime': {N:(latestMoveTimeForBlock+BigInt(1)).toString()}
-        }
+        },
+        ConsistentRead: true
     };
 
-    let moveResult = await docClient.send(new QueryCommand(moveQueryParams));
-    const moves = moveResult.Items;
-    console.warn(JSON.stringify({moves,expectedLastMoveTime}))
-    if (!moves || (typeof(expectedLastMoveTime) !== 'undefined' && (moves.length && moves[moves.length-1]?.moveTime.N !== expectedLastMoveTime)))
-        throw new Error ('Move query failed');
+    // allow several retries just in case we try to fetch a move in between when the clock and move tables are updated
+    let moves, moveQuerySuccess = false;
+    for (let moveQueryTry = 0; !moveQuerySuccess && moveQueryTry < MaxMoveQueryRetries; ++moveQueryTry) {
+        let moveResult = await docClient.send(new QueryCommand(moveQueryParams));
+        moves = moveResult.Items;
+//    console.warn(JSON.stringify({moves,expectedLastMoveTime}))
+        moveQuerySuccess == moves && (typeof(expectedLastMoveTime) === 'undefined' || (moves?.length && moves[moves.length-1]?.moveTime.N === expectedLastMoveTime));
+        if (!moveQuerySuccess)
+            await timeout(Math.random() * MaxMoveQueryRetryDelay);
+    }
 
     const isComplete = blockTimedOut || (moveResult.Items.length === MaxOutgoingMovesForBlock);
     return { ...wrapper, moves: moves.map(unmarshallMove), isComplete, ...isComplete ? {nextBlockTime:blockTimedOut?latestMoveTimeForBlock.toString():expectedLastMoveTime} : {} };
@@ -448,7 +458,7 @@ const makeHandlerForEndpoint = (endpoint) => {
                 const originallyRequestedUnixTime = requestedUnixTime;
                 let requestedBoardTime = BigInt(requestedUnixTime) * BlockTicksPerSecond / 1000n;
                 // Retry up to rnd(MaxMoveRetries) times:
-                const moveRetries = Math.floor(Math.random()*MaxMoveRetries);
+                const moveRetries = Math.floor(Math.random()*MaxClockUpdateRetries);
                 let retry = 0, newMoveTime = false, success = false;
                 for (retry = 0; retry <= moveRetries && !newMoveTime; ++retry) {
                     const currentTimeOnServer = Date.now();
@@ -501,7 +511,7 @@ const makeHandlerForEndpoint = (endpoint) => {
                         ReturnValues: 'ALL_NEW'
                     };
 //                    console.warn({moveUpdateParams})
-                    for (let moveRetry = 0; moveRetry < MaxMoveTableRetries; ++moveRetry) {
+                    for (let moveRetry = 0; moveRetry < MaxMoveUpdateRetries; ++moveRetry) {
                         //  - retry persistently until move table entry is created
                         const moveUpdate = await docClient.send (new UpdateCommand(moveUpdateParams));
 //                        console.warn({moveUpdate})
