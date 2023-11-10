@@ -28,6 +28,7 @@ const opt = getopt.create([
   ['t' , 'time=T'        , 'specify ?since=T in ms (for GET moves), move time in ms (for POST moves), or block time in ticks (for POST blocks)'],
   ['M' , 'moves=LIST'    , 'specify JSON move (for POST moves) or move list (for POST blocks)'],
   ['S' , 'state=JSON'    , 'specify board state (for POST blocks)'],
+  ['q' , 'header'        , 'specify ?headerOnly=1 (for GET blocks)'],
   ['v' , 'verbose'       , 'log web traffic'],
   ['h' , 'help'          , 'display this help message']
 ])              // create Getopt instance
@@ -80,7 +81,7 @@ switch (routeKey) {
                         boardState: opt.options.boardState || '' }
         break
     case 'GET /blocks':
-        route = '/boards/' + nextArg('id') + '/blocks/' + nextArg('hash')
+        route = '/boards/' + nextArg('id') + '/blocks/' + nextArg('hash') + (opt.options.header ? '?headerOnly=1' : '')
         break
     case 'GET /state':
         route = '/boards/' + nextArg('id') + '/state'

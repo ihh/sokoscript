@@ -229,7 +229,7 @@ const unmarshallBlockForClient = (blockItem, headerOnly) => {
                      block: { boardTime: block.boardTime.S, 
                               boardState: unmarshall(block.boardState?.M),
                               boardHash: block.boardHash.S,
-                              moveList: block.moveList.L.map((m)=>unmarshall(m)),
+                              moveList: block.moveList.L.map((m) => unmarshallMove(m.M)),
                               moveListHash: block.moveListHash.S,
                               previousBlockHash: block.previousBlockHash.S } }) }
 }
@@ -298,7 +298,7 @@ const addOutgoingMovesToBlockWrapper = async (docClient, wrapper) => {
 };
 
 const unmarshallMove = ((m) => ({
-    moveTime: m.moveTime.N,
+    moveTime: m.moveTime.S || m.moveTime.N,  // hackily conflates two cases: move time is string-valued in block table, numerical in move table
     mover: m.mover.S,
     move: unmarshall(m.move.M)
 }));
@@ -309,6 +309,13 @@ const getBlockAndOutgoingMoves = async (docClient, boardId, blockHash, headerOnl
     if (!headerOnly)
         wrapper = await addOutgoingMovesToBlockWrapper (docClient, wrapper);
     return wrapper;
+}
+
+// strip out unnecessary stuff for /state
+const convertBlockWrapperToStateWrapper = (wrapper) => {
+    const { boardId, blockHash, block, moves, isComplete, nextBlockTime } = wrapper;
+    const { boardTime, boardState, previousBlockHash } = block;
+    return { boardId, blockHash, previousBlockHash, boardTime, boardState, moves, isComplete, ...isComplete ? {nextBlockTime} : {} };
 }
 
 const makeHandlerForEndpoint = (endpoint) => {
@@ -548,6 +555,7 @@ const makeHandlerForEndpoint = (endpoint) => {
                 // since all checks pass, create a block table entry with this board ID and hash, attributed to caller, conditional on none existing
                 // increment the previous block's predecessorCount count
                 const block = makeBlockTableEntry ({boardTime, boardState, previousBlockHash, moveList: previousBlock.moves, moveListHash});
+                console.warn({moveList:block.moveList})
                 const blockHash = hash(block);
                 const blockUpdateParams = {
                     TableName: blockTableName,
@@ -619,7 +627,7 @@ const makeHandlerForEndpoint = (endpoint) => {
                     const wrapper = unmarshallBlockForClient (bestBlock, false)
                     // add outgoing moves
                     let result;
-                    try { let body = await addOutgoingMovesToBlockWrapper (docClient, wrapper, boardId); result = { statusCode: 200, body } }
+                    try { let body = convertBlockWrapperToStateWrapper (await addOutgoingMovesToBlockWrapper (docClient, wrapper, boardId)); result = { statusCode: 200, body } }
                     catch (err) { result = { statusCode: 404, message: err.message }}
                     console.warn({result})
                     return result;
