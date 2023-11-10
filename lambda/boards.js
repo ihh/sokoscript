@@ -2,6 +2,7 @@
 import { DynamoDBClient, CreateTableCommand, DeleteTableCommand, QueryCommand, DeleteItemCommand } from "@aws-sdk/client-dynamodb";
 import { DynamoDBDocumentClient, UpdateCommand, PutCommand } from "@aws-sdk/lib-dynamodb";
 import { unmarshall } from "@aws-sdk/util-dynamodb";
+import { ApiGatewayManagementApiClient, PostToConnectionCommand } from "@aws-sdk/client-apigatewaymanagementapi";
 
 // Global parameters
 const TimeInSecondsBetweenBlocks = 600;
@@ -17,6 +18,7 @@ const TicksBetweenBlocks = BigInt(TimeInSecondsBetweenBlocks) * BlockTicksPerSec
 const TicksBeforeUpdate = BigInt(TimeInSecondsBeforeBlockUpdateAllowed) * BlockTicksPerSecond;
 
 const MaxConnectionLifetimeMillisecs = 24*60*60*1000;
+const WebSocketEndpoint = process.env.WEBSOCKET_API_ENDPOINT;
 
 const createEmptyBoardState = (time, seed) => ({ grammar: '',
                                                  board: { time: time.toString(),
@@ -186,12 +188,28 @@ const createTables = async (endpoint) => {
     const connectionTableParams = {
         TableName: connectionTableName,
         KeySchema: [
-            { AttributeName: 'boardId', KeyType: 'HASH' },
-            { AttributeName: 'connectionTime', KeyType: 'RANGE' }
+            { AttributeName: 'connectionId', KeyType: 'HASH' }
         ],
         AttributeDefinitions: [
-            { AttributeName: 'boardId', AttributeType: 'S' },
-            { AttributeName: 'connectionTime', AttributeType: 'N' }
+            { AttributeName: 'connectionId', AttributeType: 'S',
+              AttributeName: 'boardId', AttributeType: 'S',
+              AttributeName: 'connectionTime', AttributeType: 'N' }
+        ],
+        GlobalSecondaryIndexes: [
+            {
+                IndexName: 'boardId-connectionTime-index',
+                KeySchema: [
+                    { AttributeName: 'boardId', KeyType: 'HASH',
+                      AttributeName: 'connectionTime', KeyType: 'RANGE' }
+                ],
+                Projection: {
+                    ProjectionType: 'ALL'
+                },
+                ProvisionedThroughput: {
+                    ReadCapacityUnits: 1,
+                    WriteCapacityUnits: 1
+                }
+            }
         ],
         ProvisionedThroughput: {
             ReadCapacityUnits: 1,
@@ -443,15 +461,13 @@ const makeHandlerForEndpoint = (endpoint) => {
                         body: { message: 'Move time out of range' },
                     };
                 let moveTime = BigInt(requestedUnixTime) * BlockTicksPerSecond / 1000n;
-                let movePut = false, retry;
+                let movePut = false, moveData, retry;
                 for (retry = 0; !movePut && retry < MaxMoveRetries; ++retry) {
                     //  - create a move table entry with this board ID and moveTime, attributed to caller
+                    moveData = { boardId, moveTime, mover: callerId, move };
                     const movePutParams = {
                         TableName: moveTableName,
-                        Item: { boardId, 
-                                moveTime, 
-                                mover: callerId, 
-                                move },
+                        Item: moveData,
                         ConditionExpression: 'attribute_not_exists(boardId)'
                     };
                     try {
@@ -464,12 +480,41 @@ const makeHandlerForEndpoint = (endpoint) => {
                         ++moveTime;
                 }
 
-                console.log({movePut})
-                if (movePut)
+                if (movePut) {
+
+                    const connectQueryParams = {
+                        TableName: connectionTableName,
+                        IndexName: 'boardId-connectionTime-index',
+                        KeyConditionExpression: 'boardId = :id and connectionTime > :since',
+                        ExpressionAttributeValues: {
+                            ':id': { S: boardId },
+                            ':since': { N: Date.now() - MaxConnectionLifetimeMillisecs }
+                        }
+                    };
+                    const connectQueryResults = await docClient.send(new QueryCommand(connectQueryParams));
+                    const connections = connectQueryResults.Items || [];
+                    
+                    const apiClient = new ApiGatewayManagementApiClient({ endpoint: WebSocketEndpoint });
+                    const sendMessages = connections.map(async ({ connectionId }) => {
+                        try {
+                            const postCommand = new PostToConnectionCommand({ ConnectionId: connectionId, Data: moveData });
+                            await apiClient.send (postCommand);
+                          } catch (e) {
+                            console.log(e);
+                          }
+                    });
+                    
+                    try {
+                        await Promise.all(sendMessages);
+                    } catch (e) {
+                        console.log(e);
+                    }
+    
                     return {
                         statusCode: 200,
                         body: { message: 'Move posted', moveTime: moveTime.toString() },
                     };
+                }
 
                 // if move table entry creation failed, return an error
                 return {
@@ -605,7 +650,7 @@ const makeHandlerForEndpoint = (endpoint) => {
                         ':id': {S:boardId},
                         ':since': {N:(event.queryParameters?.since).toString()}
                     }
-                };
+                 };
                 const moveQueryResults = await docClient.send(new QueryCommand(moveQueryParams));
                 const moves = moveQueryResults.Items || [];
                 let body = { moves: moves.map(unmarshallMove) };
@@ -615,6 +660,47 @@ const makeHandlerForEndpoint = (endpoint) => {
                     statusCode: 200,
                     body
                 };
+            }
+
+            case '$connect': {
+                const connectionId = event.requestContext.connectionId;
+                const connectionTime = event.requestContext.connectedAt;
+                const connectPutParams = {
+                    TableName: connectionTableName,
+                    Item: { connectionId,
+                            connectionTime }
+                }
+                await docClient.send(new PutCommand(connectPutParams));
+                return { statusCode: 200 }
+            }
+
+            case '$disconnect': {
+                const connectionId = event.requestContext.connectionId;
+                const connectDeleteParams = {
+                    TableName: connectionTableName,
+                    Item: { connectionId }
+                };
+                await docClient.send(new DeleteItemCommand(connectDeleteParams));
+                return { statusCode: 200 }
+            }
+
+            case '$default': {
+                return { statusCode: 404 }
+            }
+
+            case 'subscribe': {
+                const connectionId = event.requestContext.connectionId;
+                const boardId = JSON.parse(event.body).boardId;
+                const connectUpdateParams = {
+                    TableName: connectionTableName,
+                    Key: { connectionId },
+                    UpdateExpression: 'set boardId=:boardId',
+                    ExpressionAttributeValues: {
+                        ':boardId': boardId
+                    }
+                };
+                await docClient.send(new UpdateCommand(connectUpdateParams));
+                return { statusCode: 200 }
             }
 
             default:
