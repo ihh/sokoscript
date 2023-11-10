@@ -17,6 +17,7 @@ const deleteTables = () => {
     exec (`aws dynamodb delete-table --endpoint-url ${endpoint} --no-cli-pager --table-name soko-clocks`)
     exec (`aws dynamodb delete-table --endpoint-url ${endpoint} --no-cli-pager --table-name soko-blocks`)
     exec (`aws dynamodb delete-table --endpoint-url ${endpoint} --no-cli-pager --table-name soko-moves`)
+    exec (`aws dynamodb delete-table --endpoint-url ${endpoint} --no-cli-pager --table-name soko-connections`)
 }
 
 // parse command-line options

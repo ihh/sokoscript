@@ -17,6 +17,8 @@ const BlockTicksPerSecond = BigInt(Math.pow(2,32));
 const TicksBetweenBlocks = BigInt(TimeInSecondsBetweenBlocks) * BlockTicksPerSecond;
 const TicksBeforeUpdate = BigInt(TimeInSecondsBeforeBlockUpdateAllowed) * BlockTicksPerSecond;
 
+const MaxConnectionLifetimeMillisecs = 24*60*60*1000;
+
 const createEmptyBoardState = (time, seed) => ({ grammar: '',
                                                  board: { time: time.toString(),
                                                           lastEventTime: time.toString(),
@@ -29,6 +31,7 @@ const createEmptyBoardState = (time, seed) => ({ grammar: '',
 const clockTableName = 'soko-clocks';
 const moveTableName = 'soko-moves';
 const blockTableName = 'soko-blocks';
+const connectionTableName = 'soko-connections';
 
 // Subroutine: AWS config params
 const createAWSConfig = (endpoint) => ({endpoint});
@@ -80,13 +83,16 @@ const deleteTables = async (endpoint) => {
         const clockTableParams = { TableName: clockTableName };
         const moveTableParams = { TableName: moveTableName };
         const blockTableParams = { TableName: blockTableName };
+        const connectionTableParams = { TableName: connectionTableName };
         let clockTable = dynamoClient.send(new DeleteTableCommand(clockTableParams));
         let moveTable = dynamoClient.send(new DeleteTableCommand(moveTableParams));
         let blockTable = dynamoClient.send(new DeleteTableCommand(blockTableParams));
+        let connectionTable = dynamoClient.send(new DeleteTableCommand(connectionTableParams));
         const clockResult = await clockTable;
         const moveResult = await moveTable;
         const blockResult = await blockTable;
-        return { clockResult, moveResult, blockResult };
+        const connectionResult = await connectionTable;
+        return { clockResult, moveResult, blockResult, connectionResult };
     }
 };
 
@@ -178,12 +184,29 @@ const createTables = async (endpoint) => {
             WriteCapacityUnits: 1
         }
     };
+    const connectionTableParams = {
+        TableName: connectionTableName,
+        KeySchema: [
+            { AttributeName: 'boardId', KeyType: 'HASH' },
+            { AttributeName: 'connectionTime', KeyType: 'RANGE' }
+        ],
+        AttributeDefinitions: [
+            { AttributeName: 'boardId', AttributeType: 'S' },
+            { AttributeName: 'connectionTime', AttributeType: 'N' }
+        ],
+        ProvisionedThroughput: {
+            ReadCapacityUnits: 1,
+            WriteCapacityUnits: 1
+        }
+    };
     let clockTable = dynamoClient.send(new CreateTableCommand(clockTableParams));
     let moveTable = dynamoClient.send(new CreateTableCommand(moveTableParams));
     let blockTable = dynamoClient.send(new CreateTableCommand(blockTableParams));
+    let connectionTable = dynamoClient.send(new CreateTableCommand(connectionTableParams));
     await clockTable;
     await moveTable;
     await blockTable;
+    await connectionTable;
 };
 
 // Subroutine: get a block from the block table
@@ -296,17 +319,15 @@ const makeHandlerForEndpoint = (endpoint) => {
     const handler = async (event) => {
         const routeKey = event.httpMethod + ' ' + event.resource;
         const callerId = event.requestContext?.identity?.cognitoIdentityId;
-        const boardId = event.pathParameters?.id;
-        const blockHash = event.pathParameters?.hash;
 
         const docClient = createDynamoDocumentClient (endpoint);
 
         switch (routeKey) {
-            case 'POST /boards':
+            case 'POST /boards': {
                 // create a random board ID, use it as a seed for the Mersenne Twister
                 const seed32 = Math.floor(Math.random()*Math.pow(2,32));
-                const id = seed32.toString(32);
-                const time = BigInt(Date.now()) * BlockTicksPerSecond / 1000n;
+                const boardId = seed32.toString(32);
+                const boardTimeAtCreation = BigInt(Date.now()) * BlockTicksPerSecond / 1000n;
                 const boardSize = parseInt (event.body?.boardSize);
 
                 // check that boardSize is a power of 2
@@ -316,52 +337,42 @@ const makeHandlerForEndpoint = (endpoint) => {
                         body: { message: 'Board size must be a power of 2' },
                     };
                 // create the root block, and get the hash of it, but don't store it in the block table yet
-                const boardState = createEmptyBoardState (time, seed32);
-                const rootBlock = makeBlockTableEntry ({ boardTime: time, boardState });
+                const boardState = createEmptyBoardState (boardTimeAtCreation, seed32);
+                const rootBlock = makeBlockTableEntry ({ boardTime: boardTimeAtCreation, boardState });
                 const rootBlockHash = hash(rootBlock);
                 // create a clock table entry with this board ID, owned by caller, conditional on none existing
-                const clockUpdateParams = {
+                const clockPutParams = {
                     TableName: clockTableName,
-                    Key: { boardId: id },
-                    ConditionExpression: 'attribute_not_exists(boardId)',
-                    UpdateExpression: 'set boardOwner=:owner, boardSize=:boardSize, rootBlockHash=:rootBlockHash, rootBlock=:rootBlock, boardTimeAtCreation=:boardTimeAtCreation',
-                    ExpressionAttributeValues: {
-                        ':owner': callerId,
-                        ':boardSize': boardSize,
-                        ':rootBlockHash': rootBlockHash,
-                        ':rootBlock': rootBlock,
-                        ':boardTimeAtCreation': time
-                    },
-                    ReturnValues: 'ALL_NEW'
+                    Item: { boardId, 
+                            boardOwner: callerId, 
+                            boardSize, 
+                            rootBlockHash, 
+                            rootBlock, 
+                            boardTimeAtCreation },
+                    ConditionExpression: 'attribute_not_exists(boardId)'
                 }
-                let clockUpdate = docClient.send(new UpdateCommand(clockUpdateParams));
-                let clockResult = await clockUpdate;
-                if (clockResult?.Attributes?.boardId !== id)
-                    throw new Error ('Clock update failed');
+                await docClient.send(new PutCommand(clockPutParams));
                 // now create the root entry in the block table
-                const blockUpdateParams = {
+                const blockPutParams = {
                     TableName: blockTableName,
-                    Key: { boardId: id, blockHash: rootBlockHash },
-                    ConditionExpression: 'attribute_not_exists(boardId)',
-                    UpdateExpression: 'set firstClaimant=:firstClaimant, claimantList=:claimantList, predecessorCount=:predecessorCount, blockTime=:blockTime, theBlock=:block',
-                    ExpressionAttributeValues: {
-                        ':blockTime': time,
-                        ':block': rootBlock,
-                        ':predecessorCount': 0,
-                        ':firstClaimant': callerId,
-                        ':claimantList': [callerId]
-                      },
-                    ReturnValues: 'ALL_NEW'
-                    }
-                let blockUpdate = docClient.send (new UpdateCommand (blockUpdateParams));
-                let blockResult = await blockUpdate;
-                if (blockResult?.Attributes?.blockHash !== rootBlockHash)
-                    throw new Error ('Block update failed');
+                    Item: { boardId, 
+                            blockHash: rootBlockHash, 
+                            theBlock: rootBlock, 
+                            firstClaimant: callerId, 
+                            claimantList: [callerId], 
+                            predecessorCount: 0,
+                            blockTime: boardTimeAtCreation },
+                    ConditionExpression: 'attribute_not_exists(boardId)'
+                }
+                await docClient.send (new PutCommand (blockPutParams));
                 // return the board ID
                 return {
                     statusCode: 200,
-                    body: { message: 'Board created', boardId: id, blockHash: rootBlockHash },
+                    body: { message: 'Board created',
+                            boardId,
+                            blockHash: rootBlockHash },
                 };
+            }
 
             case 'GET /boards': {
                 // query the clock table for all boards using optional query parameter filter (owner=), sorted by boardTimeAtCreation (most recent first)
@@ -387,6 +398,7 @@ const makeHandlerForEndpoint = (endpoint) => {
             }
 
             case 'DELETE /boards/{id}': {
+                const boardId = event.pathParameters?.id;
                 try {
                     // delete the clock table entry for this board ID, conditional on owner matching caller ID
                     const clockDeleteParams = {
@@ -415,6 +427,7 @@ const makeHandlerForEndpoint = (endpoint) => {
             }
 
             case 'POST /boards/{id}/moves': {
+                const boardId = event.pathParameters?.id;
                 // move time is specified in milliseconds since epoch
                 const requestedUnixTime = parseInt (event.body?.time);
                 const move = event.body?.move;
@@ -434,7 +447,10 @@ const makeHandlerForEndpoint = (endpoint) => {
                     //  - create a move table entry with this board ID and moveTime, attributed to caller
                     const movePutParams = {
                         TableName: moveTableName,
-                        Item: { boardId, moveTime, mover: callerId, move },
+                        Item: { boardId, 
+                                moveTime, 
+                                mover: callerId, 
+                                move },
                         ConditionExpression: 'attribute_not_exists(boardId)'
                     };
                     try {
@@ -462,6 +478,8 @@ const makeHandlerForEndpoint = (endpoint) => {
             }
         
             case 'GET /boards/{id}/blocks/{hash}': {
+                const boardId = event.pathParameters?.id;
+                const blockHash = event.pathParameters?.hash;
                 let block;
                 try { block = await getBlockAndOutgoingMoves (docClient, boardId, blockHash, event.queryParameters?.headerOnly); }
                 catch (err) { return { statusCode: 404, body: { message: err.message } }}
@@ -472,6 +490,7 @@ const makeHandlerForEndpoint = (endpoint) => {
             }
 
             case 'POST /boards/{id}/blocks': {
+                const boardId = event.pathParameters?.id;
                 // TODO: verify that block fits JSON schema for a block
                 const { previousBlockHash, moveListHash, boardTime, boardState } = event.body;
                 // get previous block from block table, and its outgoing moves
@@ -498,26 +517,24 @@ const makeHandlerForEndpoint = (endpoint) => {
                 const block = makeBlockTableEntry ({boardTime, boardState, previousBlockHash, moveList: previousBlock.moves, moveListHash});
                 console.warn({moveList:block.moveList})
                 const blockHash = hash(block);
-                const blockUpdateParams = {
+                const blockPutParams = {
                     TableName: blockTableName,
-                    Key: { boardId, blockHash },
-                    ConditionExpression: 'attribute_not_exists(blockHash)',
-                    UpdateExpression: 'set firstClaimant=:firstClaimant, claimantList=:claimantList, blockTime=:blockTime, theBlock=:block, previousBlockHash=:previousBlockHash, predecessorCount=:predecessorCount',
-                    ExpressionAttributeValues: {
-                        ':previousBlockHash': previousBlockHash,
-                        ':predecessorCount': previousBlock.predecessorCount + 1,
-                        ':blockTime': BigInt(boardTime),
-                        ':block': block,
-                        ':firstClaimant': callerId,
-                        ':claimantList': [callerId]
-                    }
+                    Item: { boardId,
+                            blockHash,
+                            previousBlockHash, 
+                            theBlock: block, 
+                            firstClaimant: callerId, 
+                            claimantList: [callerId], 
+                            blockTime: BigInt(boardTime), 
+                            predecessorCount: previousBlock.predecessorCount + 1 },
+                    ConditionExpression: 'attribute_not_exists(blockHash)'
                 };
-                console.warn({blockUpdateParams})
-                let blockUpdatePromise = docClient.send (new UpdateCommand (blockUpdateParams));
-                blockUpdatePromise.catch ((err) => {
+                console.warn({blockPutParams})
+                let blockPutPromise = docClient.send (new PutCommand (blockPutParams));
+                blockPutPromise.catch ((err) => {
                     if (err.code === 'ConditionalCheckFailedException') {
                         // if the block already existed, update the existing entry to include the caller as one of the confirmers
-                        const blockClaimantsUpdateParams = {
+                        const blockUpdateParams = {
                             TableName: blockTableName,
                             Key: { boardId: id, blockHash: blockHash },
                             UpdateExpression: 'set claimantList=list_append(claimantList,:userId)',
@@ -525,12 +542,12 @@ const makeHandlerForEndpoint = (endpoint) => {
                                 ':userId': callerId
                             }
                         };
-                        return docClient.send (new UpdateCommand (blockClaimantsUpdateParams));
+                        return docClient.send (new UpdateCommand (blockUpdateParams));
                     }
                     else
                         throw err;
                 })
-                await blockUpdatePromise;
+                await blockPutPromise;
                 // return success
                 return {
                     statusCode: 200,
@@ -538,7 +555,8 @@ const makeHandlerForEndpoint = (endpoint) => {
                 };
             }
 
-            case 'GET /boards/{id}/state':
+            case 'GET /boards/{id}/state': {
+                const boardId = event.pathParameters?.id;
                 //  search the block table for all blocks for this board, sorted by time of creation (most recent first)
                 const blockQueryParams = {
                     TableName: blockTableName,
@@ -572,8 +590,10 @@ const makeHandlerForEndpoint = (endpoint) => {
                 catch (err) { result = { statusCode: 404, body: { message: err.message }} }
                 console.warn({result})
                 return result;
+            }
             
-            case 'GET /boards/{id}/moves':
+            case 'GET /boards/{id}/moves': {
+                const boardId = event.pathParameters?.id;
                 //  retrieve moves subsequent to specified time (up to a max of maxOutgoingMovesForBlock)
                 if (typeof(event.queryParameters?.since) === 'undefined')
                     return { statusCode: 400, body: { message: 'No "since" time parameter specified' } }
@@ -592,21 +612,17 @@ const makeHandlerForEndpoint = (endpoint) => {
                     statusCode: 200,
                     body: {moves: moves.map(unmarshallMove)},
                 };
-    
+            }
+
             default:
                 break;
         }
 
-        if (result)
-            return {
-                statusCode: 200,
-                body: result,
-            };
-
         return {
             statusCode: 400,
-            body: { message: 'Board state request failed' },
+            body: { message: 'Request failed' },
         };
+        
     };
     return handler;
 };
