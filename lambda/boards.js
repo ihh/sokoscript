@@ -18,7 +18,7 @@ const TicksBetweenBlocks = BigInt(TimeInSecondsBetweenBlocks) * BlockTicksPerSec
 const TicksBeforeUpdate = BigInt(TimeInSecondsBeforeBlockUpdateAllowed) * BlockTicksPerSecond;
 
 const MaxConnectionLifetimeMillisecs = 24*60*60*1000;
-const WebSocketEndpoint = process.env.WEBSOCKET_API_ENDPOINT;
+const WebSocketEndpoint = process.env.WEBSOCKET_API_ENDPOINT;   // https://{api-id}.execute-api.{region}.amazonaws.com/{stage}
 
 const createEmptyBoardState = (time, seed) => ({ grammar: '',
                                                  board: { time: time.toString(),
