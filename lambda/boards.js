@@ -4,7 +4,6 @@ import { DynamoDBDocumentClient, UpdateCommand, PutCommand } from "@aws-sdk/lib-
 import { unmarshall } from "@aws-sdk/util-dynamodb";
 
 // Global parameters
-const MaxOutgoingMovesForBlock = 100;
 const TimeInSecondsBetweenBlocks = 600;
 const TimeInSecondsBeforeBlockUpdateAllowed = 10;
 
@@ -269,10 +268,10 @@ const addOutgoingMovesToBlockWrapper = async (docClient, wrapper) => {
     const currentBoardTime = BigInt(Date.now()) * BlockTicksPerSecond / 1000n;
 
     // query move table
-    const moveQueryParams = {
+    let moves = [];
+    let moveQueryParams = {
         TableName: moveTableName,
         KeyConditionExpression: '#id = :id and #time between :lastBlockTime and :maxMoveTime',
-        Limit: MaxOutgoingMovesForBlock,
         ExpressionAttributeNames: {
             '#id': 'boardId',
             '#time': 'moveTime'
@@ -284,11 +283,13 @@ const addOutgoingMovesToBlockWrapper = async (docClient, wrapper) => {
         },
         ConsistentRead: true
     };
-
-    const moveResult = await docClient.send(new QueryCommand(moveQueryParams));
-    const moves = moveResult.Items;
-    if (!moves)
-        throw new Error ('Move query failed');
+    while (true) {
+        const moveResult = await docClient.send(new QueryCommand(moveQueryParams));
+        moves = moves.concat (moveResult.Items || []);
+        if (!moveResult.LastEvaluatedKey)
+            break;
+        moveQueryParams.ExclusiveStartKey = moveResult.LastEvaluatedKey;
+    }
 
     const ready = currentBoardTime >= earliestPostTimeForBlock;
     return { ...wrapper, moves: moves.map(unmarshallMove), nextBlockTime: nextBlockTime.toString(), ready };
@@ -603,14 +604,16 @@ const makeHandlerForEndpoint = (endpoint) => {
                     ExpressionAttributeValues: {
                         ':id': {S:boardId},
                         ':since': {N:(event.queryParameters?.since).toString()}
-                    },
-                    Limit: MaxOutgoingMovesForBlock
+                    }
                 };
                 const moveQueryResults = await docClient.send(new QueryCommand(moveQueryParams));
                 const moves = moveQueryResults.Items || [];
+                let body = { moves: moves.map(unmarshallMove) };
+                if (moveQueryResults.LastEvaluatedKey)
+                    body.more = true
                 return {
                     statusCode: 200,
-                    body: {moves: moves.map(unmarshallMove)},
+                    body
                 };
             }
 
