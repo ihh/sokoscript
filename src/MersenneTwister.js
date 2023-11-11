@@ -60,6 +60,12 @@ class MersenneTwister {
         this.mt = a.slice(1);
     }
 
+    static newFromString(s) {
+        let rng = new MersenneTwister();
+        rng.initFromString(s);
+        return rng;
+    }
+
 /**
  * Generates a random unsigned 32-bit integer.
  */

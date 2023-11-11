@@ -212,4 +212,4 @@ const bigIntContainerToObject = (x) => {
     ));
 }
 
-export { makeGrammarIndex, expandInherits, compileTypes, syntaxErrorMessage, parseOrUndefined, grammarIndexToRuleList, compiledGrammarIndexToRuleList, bigIntContainerToObject }
+export { makeGrammarIndex, expandInherits, compileTypes, syntaxErrorMessage, parseOrUndefined, grammarIndexToRuleList, compiledGrammarIndexToRuleList, bigIntContainerToObject, UnknownType, EmptyType }

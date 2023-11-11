@@ -20,10 +20,7 @@ const TicksBeforeUpdate = BigInt(TimeInSecondsBeforeBlockUpdateAllowed) * BlockT
 const MaxConnectionLifetimeMillisecs = 24*60*60*1000;
 const WebSocketEndpoint = process.env.WEBSOCKET_API_ENDPOINT;   // https://{api-id}.execute-api.{region}.amazonaws.com/{stage}
 
-const createEmptyBoardState = (time, seed) => ({ grammar: '',
-                                                 board: { time: time.toString(),
-                                                          lastEventTime: time.toString(),
-                                                          seed } });
+const createEmptyBoardState = ({ time, seed, owner, size }) => ({ board: { time: time.toString(), seed, owner, size } });
 
 // The conceptual hierarchy of tables is clocks->moves->blocks items in each of which can be owned by users.
 // Each clock defines a board, whose state is updated by moves, whose accumulation is reflected in blocks.
@@ -356,7 +353,7 @@ const makeHandlerForEndpoint = (endpoint) => {
                         body: { message: 'Board size must be a power of 2' },
                     };
                 // create the root block, and get the hash of it, but don't store it in the block table yet
-                const boardState = createEmptyBoardState (boardTimeAtCreation, seed32);
+                const boardState = createEmptyBoardState ({ time: boardTimeAtCreation, seed: seed32, owner: callerId, size: boardSize });
                 const rootBlock = makeBlockTableEntry ({ boardTime: boardTimeAtCreation, boardState });
                 const rootBlockHash = hash(rootBlock);
                 // create a clock table entry with this board ID, owned by caller, conditional on none existing

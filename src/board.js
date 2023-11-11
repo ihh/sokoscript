@@ -1,9 +1,12 @@
 import * as lookups from './lookups.js';
 import { applyTransformRule, transformRuleUpdate } from './engine.js';
 import { fastLn_leftShift26_max, fastLn_leftShift26 } from './log2.js';
-import { bigIntContainerToObject } from './gramutil.js';
+import { parseOrUndefined, compileTypes } from './gramutil.js';
 import { MersenneTwister } from './MersenneTwister.js';
 import { stringify } from './canonical-json.js';
+
+const defaultBoardSize = 64;
+const defaultRngSeed = 5489;
 
 // Time-efficient data structure for storing a set of ints in the range [0,n) where n is a power of 2
 // Uses 2n memory.
@@ -76,17 +79,21 @@ const bigMin = (...args) => args.reduce((m, e) => e < m ? e : m);
 const bigMax = (...args) => args.reduce((m, e) => e > m ? e : m);
 
 class Board {
-    constructor (size, grammar, owner, seed) {
-        this.size = size;
-        this.grammar = grammar;
-        this.owner = owner;
-        this.rng = new MersenneTwister (seed || 5489);
+    constructor (opts) {
         this.maxStateLen = 64;
-        this.time = BigInt(0);
-        this.lastEventTime = BigInt(0);
-        this.cell = new Array(size*size).fill(0).map((_)=>({type:0,state:''}));
-        this.byType = new Array(grammar.types.length).fill(0).map((_,n)=>new RangeCounter(size*size,n===0));
+        this.initFromJSON (opts || {});
+    }
+
+    initGrammar (grammar) {
+        this.grammarSource = grammar;
+        this.grammar = compileTypes (parseOrUndefined(grammar,{error:false}) || []);
+        this.cell = new Array(this.size*this.size).fill(0).map((_)=>({type:0,state:''}));
+        this.byType = new Array(this.grammar.types.length).fill(0).map((_,n)=>new RangeCounter(this.size*this.size,n===0));
         this.byID = {};
+    }
+
+    updateGrammar (grammar) {
+        this.initFromJSON ({...this.toJSON(), grammar});
     }
 
     timeInSeconds() {
@@ -211,9 +218,9 @@ class Board {
         return { wait, x, y, rule, dir }
     }
 
-    processMessage (msg) {
-        if (msg.type === 'command') {
-            const { time, user, id, dir, command, key } = msg;
+    processMove (move) {
+        if (move.type === 'command') {
+            const { time, user, id, dir, command, key } = move;
             const index = this.byID[id];
             if (typeof(index) !== 'undefined') {
                 const [x,y] = this.index2xy[index];
@@ -222,20 +229,32 @@ class Board {
                     rules.reduce ((rule) => success || applyTransformRule (this, x, y, dir, rule), false);
                 }
             }
-        } else if (msg.type === 'write') {
-            const { time, user, cells } = msg;
+        } else if (move.type === 'write') {
+            const { time, user, cells } = move;
             cells.forEach ((write) => {
-                const { x, y, oldType, oldState, type, state, meta } = write;
-                const index = this.xy2index(x,y);
-                const cell = this.cell[index];
-                if (typeof(cell.owner) === 'undefined' || user === cell.owner || user === Board.owner)
-                    if (typeof(meta?.owner) === 'undefined' || user === meta.owner)
-                        if (typeof(oldType) === 'undefined' || this.grammar.types[cell.type] === oldType)
-                            if (typeof(oldState === 'undefined' || cell.state === oldState))
-                                this.setCell (x, y, { type, state, meta });
+                const { x, y, id, oldType, oldState, type, state, meta } = write;
+                const index = id ? this.byID[id] : (typeof(x) !== 'undefined' && typeof(y) !== 'undefined' ? this.xy2index(x,y) : undefined);
+                if (typeof(index) !== 'undefined') {
+                    const cell = this.cell[index];
+                    if (typeof(cell.owner) === 'undefined' || user === cell.owner || user === Board.owner)
+                        if (typeof(meta?.owner) === 'undefined' || user === meta.owner)
+                            if (typeof(oldType) === 'undefined' || this.grammar.types[cell.type] === oldType)
+                                if (typeof(oldState === 'undefined' || cell.state === oldState)) {
+                                    let typeIdx = this.grammar.typeIndex[type];
+                                    if (typeof(typeIdx) === 'undefined') {
+                                        meta = {...meta||{},type};
+                                        typeIdx = this.grammar.unknownType;
+                                    }
+                                    this.setCell (x, y, { type: typeIdx, state, meta });
+                                }
+                }
             })
+        } else if (move.type === 'grammar') {
+            const { user, grammar } = move;
+            if (user === Board.owner)
+                this.updateGrammar (grammar);
         } else
-            console.error ('Unknown message type');
+            console.error ('Unknown move type');
     }
 
     randomDir() {
@@ -243,7 +262,7 @@ class Board {
     }
 
     // if hardStop is true, then there is a concrete event at time t, and we will advance the clock to that point even if nothing happens in the final interval
-    // if hardStop is false, we stop the clock (and the random number generator) at the last event *before* t, so that we can resume consistently if more events (e.g. messages) arrive after t but before the next event
+    // if hardStop is false, we stop the clock (and the random number generator) at the last event *before* t, so that we can resume consistently if more events (e.g. moves) arrive after t but before the next event
     evolveAsyncToTime (t, hardStop) {
         while (this.time < t) {
             const mt = this.rng.mt;
@@ -285,22 +304,44 @@ class Board {
        }
     }
 
-    // evolve board, processing sync rules and messages
+    // evolve board, processing sync rules and moves
     // There is probably no reason to call this with hardStop==true, unless imposing another time limit that is well-defined within the game
-    evolveAndProcess (t, messages, hardStop) {
-        messages.filter ((msg) => msg.time > t).toSorted ((a,b) => a.time - b.time).reduce ((message) => {
-            this.evolveToTime (message.time, true);
-            this.processMessage (message);
+    evolveAndProcess (t, moves, hardStop) {
+        moves.filter ((msg) => msg.time > t).toSorted ((a,b) => a.time - b.time).reduce ((move) => {
+            this.evolveToTime (move.time, true);
+            this.processMove (move);
         })
         this.evolveToTime (t, hardStop);
     }
 
+    typesIncludingUnknowns() {
+        const unknownTypes = this.byType[this.grammar.unknownType].elements().reduce ((types, index) => types.add (this.cell[index].meta?.type), new Set());
+        const types = this.grammar.types.concat (Array.from(unknownTypes).filter((type)=>typeof(type)!=='undefined'));
+        const type2idx = types.reduce ((map, type, idx) => { map[type] = idx; return map; }, {});
+        return { types, type2idx };
+    }
+
+    cellToJSON (cell, type2idx) {
+        let meta = {...cell.meta || {}}, typeIdx = cell.type;
+        if (typeIdx === this.grammar.unknownType && meta.type) {
+            typeIdx = type2idx[meta.type];
+            delete meta.type;
+        }
+        if (Object.keys(meta).length === 0)
+            meta = undefined;
+        return cell.state || meta ? [typeIdx,cell.state || ''].concat(meta ? [meta] : []) : typeIdx;
+    }
+
     toJSON() {
+        const { types, type2idx } = this.typesIncludingUnknowns();
         return { time: this.time.toString(),
-                lastEventTime: this.lastEventTime.toString(),
-                rng: this.rng.toString(),
-                types: this.grammar.types,
-                cell: this.cell.map ((cell) => cell.state || cell.meta ? [cell.type,cell.state || ''].concat(cell.meta ? [cell.meta] : []) : cell.type) }
+                 lastEventTime: this.lastEventTime.toString(),
+                 rng: this.rng.toString(),
+                 owner: this.owner,
+                 grammar: this.grammarSource,
+                 types,
+                 size: this.size,
+                 cell: this.cell.map ((cell) => this.cellToJSON (cell, type2idx)) }
     }
 
     toString() {
@@ -312,23 +353,26 @@ class Board {
     }
 
     initFromJSON (json) {
-        this.time = BigInt (json.time);
-        this.lastEventTime = BigInt (json.lastEventTime);
-        if (json.rng)
-            this.rng.initFromString (json.rng);
-        else if (json.seed)
-            this.rng.seed(json.seed);
+        this.owner = json.owner;
+        this.size = json.size || defaultBoardSize;
+        this.time = BigInt (json.time || 0);
+        this.lastEventTime = BigInt (json.lastEventTime || json.time || 0);
+        this.rng = json.rng ? MersenneTwister.newFromString(json.rng) : new MersenneTwister(json.seed || defaultRngSeed);
+        this.initGrammar (json.grammar || '');
         if (json.cell) {
             if (json.cell.length !== this.cell.length)
-                throw new Error ("Tried to load "+json.cell.size()+"-cell board file into "+this.cell.size()+"-cell board");
-            const unknownTypes = json.types.filter ((type) => !(type in this.grammar.typeIndex));
-            if (unknownTypes.length)
-                throw new Error ("Tried to load board with unknown types: "+unknownTypes.join(' '));
+                throw new Error ("Tried to load "+json.cell.length+"-cell board file into "+this.cell.length+"-cell board");
             json.cell.forEach ((type_state_meta, index) => {
                 if (typeof(type_state_meta) === 'number')
                     type_state_meta = [type_state_meta];
                 let [type, state, meta] = type_state_meta;
-                this.setCellByIndex (index, { type: this.grammar.typeIndex[json.types[type]],
+                type = json.types[type];
+                let typeIdx = this.grammar.typeIndex[type];
+                if (typeof(typeIdx) === 'undefined') {
+                    meta = {...meta||{},type};
+                    typeIdx = this.grammar.unknownType;
+                }
+                this.setCellByIndex (index, { type: typeIdx,
                                               state: state || '',
                                               ...(meta ? {meta} : {})});
             });
@@ -336,8 +380,8 @@ class Board {
     }
 
     // TODO
-    // Implement canonical hashes of board, rules, and messages
-    // Implement "create verifiable update" (hashes of board, rule, messages, and time lapsed, plus new board state) and "verify update"
+    // Implement canonical hashes of board, rules, and moves
+    // Implement "create verifiable update" (hashes of board, rule, moves, and time lapsed, plus new board state) and "verify update"
 
     // Implement web app:
     // React app (hook-based)
@@ -351,24 +395,6 @@ class Board {
     // - Menu of command buttons generated automatically
     // - Key presses are translated as commands
 
-    // Web API:
-    // - Chat app model: https://docs.aws.amazon.com/apigateway/latest/developerguide/websocket-api-chat-app.html
-    // - Board config CRUD. GET /boards. POST create new board. GET/PUT/DELETE /boards/BOARD: handle board config, including rules (not cell values), pause/resume state
-    // - All board config includes a version ID (eventually we can keep a revision table, don't need it just yet)
-    // - POST message to /messages/BOARD with requested time. Server responds with actual time, and broadcasts message to connected clients.
-    // - Messages rejected if the board has not been updated for a certain amount of time
-    // - Websockets: connect, disconnect
-    // - As well as 'command' and 'write' messages, server broadcasts 'config' whenever config is updated (covers pause and resume)
-    // - GET current state: last update (with ID), messages since last update, ID of current revision of rules
-    //    (assume all updates verified, for now. Conflict resolution requires some thought, e.g. subscriber consensus pending owner vote? Auto-ban cheaters?)
-    // - POST update. Includes config version ID, last update ID, last update time, and verifiable update
-    // - Check hashes match (previous board, messages, rules) but do not otherwise attempt to verify update
-
-    // Crypto:
-    // - Maybe: solve a crypto-puzzle based on the previous board hash, to mine a coin? incentivizes update correction...
-    // - New message { msg: 'pay', user, recipient, amount }
-    // - Board config includes rates for all writes & commands
-    // - Rules include two new attributes: ownerCoins and boardCoins
 }
 
 export { Board };
