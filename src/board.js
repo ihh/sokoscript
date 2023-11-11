@@ -308,7 +308,7 @@ class Board {
     }
 
     initFromString (str) {
-        this.initFromString (JSON.parse (str));
+        this.initFromJSON (JSON.parse (str));
     }
 
     initFromJSON (json) {
@@ -327,9 +327,10 @@ class Board {
             json.cell.forEach ((type_state_meta, index) => {
                 if (typeof(type_state_meta) === 'number')
                     type_state_meta = [type_state_meta];
-                this.setCellByIndex (index, { type: this.grammar.typeIndex[json.types[type_state_meta[0]]],
-                                              state: type_state_meta[1] || '',
-                                              ...(type_state_meta[2] ? {meta:type_state_meta[2]} : {})});
+                let [type, state, meta] = type_state_meta;
+                this.setCellByIndex (index, { type: this.grammar.typeIndex[json.types[type]],
+                                              state: state || '',
+                                              ...(meta ? {meta} : {})});
             });
         }
     }

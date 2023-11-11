@@ -133,15 +133,23 @@ class Matcher {
         return this;
     }
 
+    stripUniqueMetadata (cell) {
+        if (cell.meta) {
+          ['id','owner'].forEach ((prop) => delete cell.meta[prop])
+          if (!Object.keys(cell.meta).length)
+            delete cell.meta;
+        }
+    }
+
     newCell (t) {
         if (t.op === 'group') {
             const { type, state, meta } = this.termCell[t.group-1];
-            this.termCell[t.group-1] = { type, state };  // at most one cell can inherit metadata
+            this.stripUniqueMetadata (this.termCell[t.group-1]);
             return { type, state, meta }
         }
         if (t.op === 'prefix') {
             const { type, state, meta } = this.termCell[t.group-1];
-            this.termCell[t.group-1] = { type, state };  // at most one cell can inherit metadata
+            this.stripUniqueMetadata (this.termCell[t.group-1]);
             const newState = t.state ? t.state.map(this.computeStateChar.bind(this)).join('') : '';
             return { type, state: newState, meta }
         }

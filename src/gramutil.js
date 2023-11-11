@@ -1,8 +1,11 @@
 import { parse, SyntaxError } from './grammar.js';
 import { lhsTerm } from './serialize.js';
 
+const EmptyType = '_';
+const UnknownType = '?';
+
 const makeGrammarIndex = (rules) => {
-    let transform = {}, syncTransform = {}, parents = {}, types = ['_'], seenType = {'_':true};
+    let transform = {}, syncTransform = {}, parents = {}, types = [EmptyType], seenType = {[EmptyType]:true,[UnknownType]:true};
     const markTerm = (term) => {
         if (term.op === 'negterm')
             markTerm (term.term);
@@ -45,6 +48,7 @@ const makeGrammarIndex = (rules) => {
             break;
         }
     })
+    types.push (UnknownType);
     let ancestors = Object.assign (
         ...[{}].concat (Object.keys(parents).map ((child) => {
             let seen = {};
@@ -148,7 +152,7 @@ const compileTypes = (rules) => {
     const { types, typeIndex, syncRates } = index;
     const million = 1000000;
     const transform = compileTransform (types, index.transform, typeIndex, 'rate', million);
-    const syncTransform = index.syncRates.map ((r) => compileTransform (index.types, index.syncTransform[r], typeIndex, 'sync', 1));
+    const syncTransform = index.syncRates.map ((r) => compileTransform (types, index.syncTransform[r], typeIndex, 'sync', 1));
 
     // convert from microHertz rate to Hertz with rejection
     const bigMillion = BigInt(million), big2pow30minus1 = BigInt(0x3fffffff), bigMillion_leftShift32 = bigMillion << BigInt(32);
@@ -166,8 +170,9 @@ const compileTypes = (rules) => {
     const typesBySyncCategory = syncRates.map ((_r, m) => types.reduce ((l, _t, n) => l.concat (syncTransform[m][n].length ? [n] : []), []));
     const syncPeriods = syncRates.map ((r) => bigMillion_leftShift32 / BigInt(r));  // convert from microHz to Hz
     const syncCategories = syncPeriods.map((_p,n)=>n).reverse();
-    
-    return { transform, syncTransform, types, typeIndex, syncRates, syncPeriods, syncCategories, rateByType, syncCategoriesByType, typesBySyncCategory, command, key }
+    const unknownType = types.length - 1;
+
+    return { transform, syncTransform, types, unknownType, typeIndex, syncRates, syncPeriods, syncCategories, rateByType, syncCategoriesByType, typesBySyncCategory, command, key }
 }
 
 const syntaxErrorMessage = (e, text) => {
@@ -196,8 +201,8 @@ const parseOrUndefined = (text, opts) => {
     return rules;
 }
 
-const grammarIndexToRuleList = (index, addComments) => index.types.reduce ((newRules,type,n) => newRules.concat(addComments ? [{type:'comment',comment:' Type '+n+': '+type+' ('+(index.transform[type]||[]).length+' rules)'}] : []).concat(index.transform[type]||[]).concat((index.syncCategoriesByType[type] || []).reduce((l,s)=>l.concat(index.syncTransform[s][type]),[])), []);
-const compiledGrammarIndexToRuleList = (index, addComments) => index.types.reduce ((newRules,type,n) => newRules.concat(addComments ? [{type:'comment',comment:' Type '+n+': '+type+' ('+(index.transform[n]||[]).length+' rules)'}] : []).concat(index.transform[n]||[]).concat((index.syncCategoriesByType[n] || []).reduce((l,s)=>l.concat(index.syncTransform[s][n]),[])), []);
+const grammarIndexToRuleList = (index, addComments) => index.types.reduce ((newRules,type,n) => newRules.concat(addComments && n !== index.unknownType ? [{type:'comment',comment:' Type '+n+': '+type+' ('+(index.transform[type]||[]).length+' rules)'}] : []).concat(index.transform[type]||[]).concat((index.syncCategoriesByType[type] || []).reduce((l,s)=>l.concat(index.syncTransform[s][type]),[])), []);
+const compiledGrammarIndexToRuleList = (index, addComments) => index.types.reduce ((newRules,type,n) => newRules.concat(addComments && n !== index.unknownType ? [{type:'comment',comment:' Type '+n+': '+type+' ('+(index.transform[n]||[]).length+' rules)'}] : []).concat(index.transform[n]||[]).concat((index.syncCategoriesByType[n] || []).reduce((l,s)=>l.concat(index.syncTransform[s][n]),[])), []);
 
 const bigIntContainerToObject = (x) => {
     return JSON.parse(JSON.stringify(x, (key, value) =>
