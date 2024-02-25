@@ -35,7 +35,7 @@ class RangeCounter {
     }
 
     total() {
-        return this.levelCount[this.log2n];
+        return this.levelCount[this.log2n][0];
     }
 
     // k is 0-based
@@ -308,7 +308,7 @@ class Board {
     // evolve board, processing sync rules and moves
     // There is probably no reason to call this with hardStop==true, unless imposing another time limit that is well-defined within the game
     evolveAndProcess (t, moves, hardStop) {
-        moves.filter ((msg) => msg.time > t).toSorted ((a,b) => a.time - b.time).reduce ((move) => {
+        moves.filter ((msg) => msg.time > t).toSorted ((a,b) => a.time - b.time).forEach ((move) => {
             this.evolveToTime (move.time, true);
             this.processMove (move);
         })
@@ -320,6 +320,17 @@ class Board {
         const types = this.grammar.types.concat (Array.from(unknownTypes).filter((type)=>typeof(type)!=='undefined'));
         const type2idx = types.reduce ((map, type, idx) => { map[type] = idx; return map; }, {});
         return { types, type2idx };
+    }
+
+    typeCountsIncludingUnknowns() {
+        let count = {};
+        this.typesIncludingUnknowns().types.forEach ((type) => count[type] = 0);
+        this.cell.forEach ((cell) => {
+            const type = cell.type === this.grammar.unknownType ? cell.meta?.type : this.grammar.types[cell.type];
+            if (type)
+                count[type] = (count[type] || 0) + 1;
+        })
+        return count;
     }
 
     cellToJSON (cell, type2idx) {

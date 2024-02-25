@@ -127,7 +127,8 @@ class Matcher {
             if (match) {
                 this.termCell.push (cell);
                 this.termTailStart.push (term.state && term.state[term.state.length-1].op === 'any' ? term.state.length - 1 : state.length);
-            }
+            } else
+                this.failed = true;
         } else
             this.failed = true;
         return this;
