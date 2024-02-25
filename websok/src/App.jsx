@@ -78,7 +78,7 @@ return (
   </div>))}
 </div>
 <div>Grammar</div>
-<DebounceInput element={Textarea} autoSize debounceTimeout={500} value={grammarText} onChange={onGrammarTextChange}/>
+<DebounceInput element={Textarea} debounceTimeout={500} autoSize value={grammarText} onChange={onGrammarTextChange}/>
 <div>{errorMessage}</div>
 </>
 );
