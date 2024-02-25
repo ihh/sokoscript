@@ -8,6 +8,8 @@ import { stringify } from './canonical-json.js';
 const defaultBoardSize = 64;
 const defaultRngSeed = 5489;
 
+const xy2index = (x, y, size) => (((y % size) + size) % size) * size + (((x % size) + size) % size);
+
 // Time-efficient data structure for storing a set of ints in the range [0,n) where n is a power of 2
 // Uses 2n memory.
 // Counting total number of elements is an O(1) operation
@@ -105,8 +107,7 @@ class Board {
     }
 
     xy2index (x, y) {
-        const size = this.size;
-        return (((y % size) + size) % size) * size + (((x % size) + size) % size);
+        return xy2index (x, y, this.size);
     }
 
     getCell (x, y) {
@@ -232,7 +233,7 @@ class Board {
         } else if (move.type === 'write') {
             const { time, user, cells } = move;
             cells.forEach ((write) => {
-                const { x, y, id, oldType, oldState, type, state, meta } = write;
+                let { x, y, id, oldType, oldState, type, state, meta } = write;
                 const index = id ? this.byID[id] : (typeof(x) !== 'undefined' && typeof(y) !== 'undefined' ? this.xy2index(x,y) : undefined);
                 if (typeof(index) !== 'undefined') {
                     const cell = this.cell[index];
@@ -397,4 +398,4 @@ class Board {
 
 }
 
-export { Board };
+export { Board, xy2index };

@@ -6,11 +6,15 @@ import { Board } from './soko/board.js';
 
 import TiledBoard from './components/TiledBoard.jsx';
 
+const initSize = 16;
+const initCell = new Array(initSize**2).fill(1);
+const initGrammarText = 'bee _ : _ bee.\n';
 export default function App() {
-    let [grammarText, setGrammarText] = useState('bee _ : _ bee.\n');
-    let [icons, setIcons] = useState({'bee': 'game-icons:bee'});
-    let [board, setBoard] = useState(new Board());
-    console.log(board);
+    let [grammarText, setGrammarText] = useState(initGrammarText);
+    let [icons, setIcons] = useState({bee: {icon: 'game-icons:bee', color: 'orange'}});
+    let [board, setBoard] = useState(new Board({size:initSize, cell:initCell, types:['_','bee'], grammar:initGrammarText}));
+
+    const { types } = board.typesIncludingUnknowns()
 
     const onGrammarTextChange = (e) => {
         const {
@@ -21,11 +25,12 @@ export default function App() {
 
 return (
 <>
-<div>Hello World</div>
-<Icon icon="game-icons:brass-eye" />
+<div>Board</div>
 
+<TiledBoard board={board} types={types} icons={icons} />
+
+<div>Grammar</div>
 <Textarea autoSize value={grammarText} onChange={onGrammarTextChange}/>
-<TiledBoard board={board} icons={icons} />
 </>
 );
 }
