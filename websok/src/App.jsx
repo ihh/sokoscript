@@ -72,13 +72,13 @@ return (
 <button onClick={onPauseRestart}>{timer ? "Pause" : "Start"}</button>
 <span>Time: {(Number(boardTime >> BigInt(22)) / 1024).toFixed(2)}s</span>
 <div className="typeCounts">
-  {Object.keys(typeCount).map((type) => type === '_' || type == '?' ? '' : (<div key={`typeCount-${type}`}>
+  {Object.keys(typeCount).map((type) => type === '?' ? '' : (<div key={`typeCount-${type}`}>
     <Tile type={type} icon={icons[type]}/>
-    {type} ({typeCount[type]})
+    {type==='_'?(<i>none</i>):type} ({typeCount[type]})
   </div>))}
 </div>
 <div>Grammar</div>
-<DebounceInput element={Textarea} autoSize value={grammarText} onChange={onGrammarTextChange}/>
+<DebounceInput element={Textarea} autoSize debounceTimeout={500} value={grammarText} onChange={onGrammarTextChange}/>
 <div>{errorMessage}</div>
 </>
 );
