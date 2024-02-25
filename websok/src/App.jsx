@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import Textarea from 'rc-textarea';
+import DebounceInput from 'react-debounce-input';
 
 import { Board } from './soko/board.js';
 import { parseOrUndefined } from './soko/gramutil.js';
@@ -77,7 +78,7 @@ return (
   </div>))}
 </div>
 <div>Grammar</div>
-<Textarea autoSize value={grammarText} onChange={onGrammarTextChange}/>
+<DebounceInput element={Textarea} autoSize value={grammarText} onChange={onGrammarTextChange}/>
 <div>{errorMessage}</div>
 </>
 );
