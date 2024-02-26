@@ -1,20 +1,31 @@
 import { useState } from 'react';
 
 export default function useBoardUtils (opts) {
-    const { onPaint } = opts;
+    const { onPaint, onDrag } = opts;
 
-    let [mouseDown, setMouseDown] = useState(false);
+    let [mouseState, setMouseState] = useState({mouseDown:false});
     let [mouseCell, setMouseCell] = useState({});
 
-    const onMouseDown = () => {
-        setMouseDown(true);
+    const onMouseDown = (evt) => {
+        const rect = evt.target.getBoundingClientRect();
+        const xOrig = evt.clientX - rect.left;
+        const yOrig = evt.clientY - rect.top;
+        setMouseState({mouseDown:true,xOrig,yOrig});
         onPaint && onPaint(mouseCell.x, mouseCell.y);
     };
-    const onMouseUp = () => setMouseDown(false);
+    const onMouseUp = () => setMouseState({mouseDown:false});
+    const onMouseMove = (evt) => {
+        if (mouseState.mouseDown && onDrag) {
+            const rect = evt.target.getBoundingClientRect();
+            const x = evt.clientX;
+            const y = evt.clientY - rect.top;
+            onDrag(x-xOrig,y-yOrig);
+        }
+    }
     const onMouseEnterCell = (x, y) => {
         setMouseCell ({x, y});
-        mouseDown && onPaint && onPaint(x, y); 
+        mouseState.mouseDown && onPaint && onPaint(x, y); 
     }
 
-    return { onMouseDown, onMouseUp, onMouseEnterCell };
+    return { onMouseDown, onMouseUp, onMouseMove, onMouseEnterCell };
 }

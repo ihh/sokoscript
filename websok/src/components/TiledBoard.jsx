@@ -5,16 +5,17 @@ import { xy2index } from '../soko/board.js';
 import './TiledBoard.css';
 
 export default function TiledBoard(props) {
-    const { size, cell, types, icons, onPaint, tileSize, background } = props;
+    const { size, cell, types, icons, onPaint, pixelsPerTile, tilesPerSide, top, left, background } = props;
     const { onMouseDown, onMouseUp, onMouseEnterCell } = useBoardUtils({onPaint});
 
-    const index = new Array(size).fill(0).map ((_, i) => i);
+    const xIndex = new Array(tilesPerSide).fill(0).map ((_, x) => x + left);
+    const yIndex = new Array(tilesPerSide).fill(0).map ((_, y) => y + top);
 
 return (
 <>
-<div className="TiledBoard" onMouseDown={onMouseDown} onMouseUp={onMouseUp} onMouseLeave={onMouseUp} style={{fontSize:tileSize+'px',width:(size*tileSize)+'px',height:(size*tileSize)+'px',background}}>
-{index.map((y) => (<div className="tileRow" key={'tiledBoardRow'+y}>
-    {index.map((x) => {
+<div className="TiledBoard" onMouseDown={onMouseDown} onMouseUp={onMouseUp} onMouseLeave={onMouseUp} style={{fontSize:pixelsPerTile+'px',width:(tilesPerSide*pixelsPerTile)+'px',height:(tilesPerSide*pixelsPerTile)+'px',background}}>
+{yIndex.map((y) => (<div className="tileRow" key={'tiledBoardRow'+y}>
+    {xIndex.map((x) => {
         const xyCell = cell[xy2index(x,y,size)];
         const typeIndex = typeof(xyCell) === 'number' ? xyCell : xyCell[0];
         const type = types[typeIndex];

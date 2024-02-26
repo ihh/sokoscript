@@ -26,6 +26,7 @@ const moveRadioId = '=move';
 
 export default function App() {
     let [board, setBoard] = useState(new Board({size:initSize, cell:initCell, types:['_','bee'], grammar:initGrammarText}));
+    let [tiledBoardState, setTiledBoardState] = useState({top:0,left:0,pixelsPerTile:32,tilesPerSide:8});
     let [boardTime, setBoardTime] = useState(board.time);
     let [timer, setTimer] = useState(null);
     let [icons, setIcons] = useState({bee: {name: 'game-icons:bee', color: 'orange'}});
@@ -98,8 +99,25 @@ return (
 <>
 <div>Board</div>
 
-<TiledBoard size={boardJson.size} cell={boardJson.cell} types={types} icons={icons} onPaint={onPaint} tileSize={16} background={background}/>
-<PixelMap size={boardJson.size} cell={boardJson.cell} types={types} icons={icons} onPaint={onPaint} zoom={4} background={background}/>
+<TiledBoard
+  size={boardJson.size}
+  cell={boardJson.cell}
+  types={types} 
+  icons={icons} 
+  onPaint={onPaint} 
+  pixelsPerTile={tiledBoardState.pixelsPerTile} 
+  tilesPerSide={tiledBoardState.tilesPerSide} 
+  top={tiledBoardState.top}
+  left={tiledBoardState.left}
+  background={background}/>
+<PixelMap 
+  size={boardJson.size} 
+  cell={boardJson.cell} 
+  types={types} 
+  icons={icons} 
+  onPaint={onPaint} 
+  zoom={4} 
+  background={background}/>
 <div>Time: {(Number(boardTime >> BigInt(22)) / 1024).toFixed(2)}s</div>
 <button onClick={onPauseRestart}>{timer ? "Pause" : "Start"}</button>
 <fieldset><table className="palette">
