@@ -1,0 +1,8 @@
+.TiledBoard {
+    background-color: black;
+}
+
+.TiledBoard .tileRow {
+    display: flex;
+    line-height: 1;
+}

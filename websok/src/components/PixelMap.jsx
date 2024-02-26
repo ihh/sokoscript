@@ -4,7 +4,7 @@ import { fromString } from 'css-color-converter';
 import { xy2index } from '../soko/board.js';
 
 export default function TiledBoard(props) {
-    let { size, zoom, cell, types, icons, onPaint } = props;
+    let { size, zoom, cell, types, icons, onPaint, ...otherProps } = props;
     const { onMouseDown, onMouseUp, onMouseEnterCell } = useBoardUtils({onPaint});
 
     const canvasRef = useRef(null);    
@@ -35,7 +35,6 @@ export default function TiledBoard(props) {
         let idata = context.createImageData(size, size);
         idata.data.set(buffer);
         context.putImageData(idata, 0, 0);
-        console.log({buffer});
     }, [size, cell, types, icons]);
     
     const onMouseMove = (evt) => {
@@ -46,5 +45,5 @@ export default function TiledBoard(props) {
     }
 
     zoom = zoom || 1;
-    return (<div><canvas ref={canvasRef} width={size} height={size} style={{width:size*zoom,height:size*zoom}} onMouseDown={onMouseDown} onMouseUp={onMouseUp} onMouseLeave={onMouseUp} onMouseMove={onMouseMove}/></div>);
+    return (<div><canvas ref={canvasRef} width={size} height={size} style={{width:size*zoom,height:size*zoom}} {...otherProps} onMouseDown={onMouseDown} onMouseUp={onMouseUp} onMouseLeave={onMouseUp} onMouseMove={onMouseMove}/></div>);
 }

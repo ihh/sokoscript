@@ -86,7 +86,7 @@ return (
 <>
 <div>Board</div>
 
-<TiledBoard size={boardJson.size} cell={boardJson.cell} types={types} icons={icons} onPaint={onPaint} />
+<TiledBoard size={boardJson.size} cell={boardJson.cell} types={types} icons={icons} onPaint={onPaint} tileSize={16} />
 <PixelMap size={boardJson.size} cell={boardJson.cell} types={types} icons={icons} onPaint={onPaint} zoom={4}/>
 <div>Time: {(Number(boardTime >> BigInt(22)) / 1024).toFixed(2)}s</div>
 <button onClick={onPauseRestart}>{timer ? "Pause" : "Start"}</button>

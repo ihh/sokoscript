@@ -4,11 +4,9 @@ const emptyIcon = "codicon:blank";
 const unknownIcon = "mdi:circle";
 
 export default function Tile(props) {
-    const { type, icon } = props;
+    const { type, icon, ...otherProps } = props;
+    const name = icon?.name || (type==='_' ? emptyIcon : unknownIcon);
     const color = icon?.color || icon?.defaultColor;
-    return (<span className="tile" title={type==='_'?'':type}>
-        {icon?.name
-            ? (<Icon icon={icon.name} color={color}/>)
-            : (<Icon icon={type==='_' ? emptyIcon : unknownIcon} color={color}/>)}
-       </span>);
+    const title = type === '_' ? '' : type;
+    return (<Icon icon={name} color={color} title={title} {...otherProps}/>);
 }
