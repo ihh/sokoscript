@@ -4,13 +4,12 @@ import { fromString } from 'css-color-converter';
 import { xy2index } from '../soko/board.js';
 
 export default function TiledBoard(props) {
-    let { size, zoom, cell, types, icons, onPaint, ...otherProps } = props;
+    let { size, zoom, cell, types, icons, onPaint, background, ...otherProps } = props;
     const { onMouseDown, onMouseUp, onMouseEnterCell } = useBoardUtils({onPaint});
 
     const canvasRef = useRef(null);    
 
     const typeRgbaArray = types.map ((type, typeIndex) => {
-        if (!typeIndex) return [0,0,0,255];
         const icon = icons[type];
         const cssColor = icon?.color || icon?.defaultColor;
         return fromString(cssColor).toRgbaArray();
