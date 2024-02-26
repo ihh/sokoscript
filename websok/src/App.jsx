@@ -8,6 +8,7 @@ import { parseOrUndefined } from './soko/gramutil.js';
 import { hexMD5 } from './soko/md5.js';
 
 import TiledBoard from './components/TiledBoard.jsx';
+import PixelMap from './components/PixelMap.jsx';
 import Tile from './components/Tile.jsx';
 
 const initSize = 16;
@@ -86,6 +87,7 @@ return (
 <div>Board</div>
 
 <TiledBoard size={boardJson.size} cell={boardJson.cell} types={types} icons={icons} onPaint={onPaint} />
+<PixelMap size={boardJson.size} cell={boardJson.cell} types={types} icons={icons} onPaint={onPaint} zoom={4}/>
 <div>Time: {(Number(boardTime >> BigInt(22)) / 1024).toFixed(2)}s</div>
 <button onClick={onPauseRestart}>{timer ? "Pause" : "Start"}</button>
 <fieldset><table className="palette">
