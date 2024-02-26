@@ -1,10 +1,10 @@
 import { useState, useRef, useEffect } from 'react';
 import useBoardUtils from './boardUtils.js';
-import { fromString } from 'css-color-converter';
+import { fromString, fromRgba } from 'css-color-converter';
 import { xy2index } from '../soko/board.js';
 
 export default function TiledBoard(props) {
-    let { size, zoom, cell, types, icons, onPaint, background, ...otherProps } = props;
+    let { size, pixelsPerCell, cell, types, icons, onPaint, background, focusRect, ...otherProps } = props;
     const { onMouseDown, onMouseUp, onMouseEnterCell } = useBoardUtils({onPaint});
 
     const canvasRef = useRef(null);    
@@ -14,6 +14,8 @@ export default function TiledBoard(props) {
         const cssColor = icon?.color || icon?.defaultColor;
         return fromString(cssColor).toRgbaArray();
     });
+    const focusRectRgbaArray = typeRgbaArray[0].slice(0,3).map((c)=>c^0xc0).concat([255]);
+    const focusRectCssColor = fromRgba(focusRectRgbaArray).toHexString();
 
     let buffer = new Uint8ClampedArray(size*size*4);
     for (let x = 0; x < size; x++)
@@ -34,15 +36,21 @@ export default function TiledBoard(props) {
         let idata = context.createImageData(size, size);
         idata.data.set(buffer);
         context.putImageData(idata, 0, 0);
+        if (focusRect) {
+            context.strokeStyle = focusRectCssColor;
+            for (let x = -size; x < 2*size; x += size)
+                for (let y = -size; y < 2*size; y += size)
+                    context.strokeRect (focusRect.left + x, focusRect.top + y, focusRect.width - 1, focusRect.height - 1);
+        }
     }, [size, cell, types, icons]);
     
     const onMouseMove = (evt) => {
         const rect = evt.target.getBoundingClientRect();
-        const x = Math.floor((evt.clientX - rect.left) / zoom);
-        const y = Math.floor((evt.clientY - rect.top) / zoom);
+        const x = Math.floor((evt.clientX - rect.left) / pixelsPerCell);
+        const y = Math.floor((evt.clientY - rect.top) / pixelsPerCell);
         onMouseEnterCell(x,y);
     }
 
-    zoom = zoom || 1;
-    return (<div><canvas ref={canvasRef} width={size} height={size} style={{width:size*zoom,height:size*zoom}} {...otherProps} onMouseDown={onMouseDown} onMouseUp={onMouseUp} onMouseLeave={onMouseUp} onMouseMove={onMouseMove}/></div>);
+    pixelsPerCell = pixelsPerCell || 1;
+    return (<div><canvas ref={canvasRef} width={size} height={size} style={{width:size*pixelsPerCell,height:size*pixelsPerCell}} {...otherProps} onMouseDown={onMouseDown()} onMouseUp={onMouseUp} onMouseLeave={onMouseUp} onMouseMove={onMouseMove}/></div>);
 }

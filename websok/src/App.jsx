@@ -95,6 +95,15 @@ export default function App() {
       setMoveCounter(moveCounter+1);
     };
 
+    const wrapCoord = (coord) => {
+      while (coord < 0) coord += board.size;
+      return coord % board.size;
+    };
+    const onDrag = (dx, dy) => {
+      if (selectedType !== undefined) return;
+      setTiledBoardState ({...tiledBoardState, left: wrapCoord(tiledBoardState.left - Math.round(dx)), top: wrapCoord(tiledBoardState.top - Math.round(dy))});
+    };
+
 return (
 <>
 <div>Board</div>
@@ -105,6 +114,7 @@ return (
   types={types} 
   icons={icons} 
   onPaint={onPaint} 
+  onDrag={onDrag}
   pixelsPerTile={tiledBoardState.pixelsPerTile} 
   tilesPerSide={tiledBoardState.tilesPerSide} 
   top={tiledBoardState.top}
@@ -116,7 +126,8 @@ return (
   types={types} 
   icons={icons} 
   onPaint={onPaint} 
-  zoom={4} 
+  pixelsPerCell={4} 
+  focusRect={{top:tiledBoardState.top,left:tiledBoardState.left,width:tiledBoardState.tilesPerSide,height:tiledBoardState.tilesPerSide}}
   background={background}/>
 <div>Time: {(Number(boardTime >> BigInt(22)) / 1024).toFixed(2)}s</div>
 <button onClick={onPauseRestart}>{timer ? "Pause" : "Start"}</button>

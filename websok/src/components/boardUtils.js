@@ -6,20 +6,18 @@ export default function useBoardUtils (opts) {
     let [mouseState, setMouseState] = useState({mouseDown:false});
     let [mouseCell, setMouseCell] = useState({});
 
-    const onMouseDown = (evt) => {
-        const rect = evt.target.getBoundingClientRect();
-        const xOrig = evt.clientX - rect.left;
-        const yOrig = evt.clientY - rect.top;
-        setMouseState({mouseDown:true,xOrig,yOrig});
+    const onMouseDown = (stateAtMouseDown) => (evt) => {
+        const xOrig = evt.clientX;
+        const yOrig = evt.clientY;
+        setMouseState({mouseDown:true,xOrig,yOrig,stateAtMouseDown});
         onPaint && onPaint(mouseCell.x, mouseCell.y);
     };
     const onMouseUp = () => setMouseState({mouseDown:false});
     const onMouseMove = (evt) => {
         if (mouseState.mouseDown && onDrag) {
-            const rect = evt.target.getBoundingClientRect();
             const x = evt.clientX;
-            const y = evt.clientY - rect.top;
-            onDrag(x-xOrig,y-yOrig);
+            const y = evt.clientY;
+            onDrag (x-mouseState.xOrig, y-mouseState.yOrig, mouseState.stateAtMouseDown);
         }
     }
     const onMouseEnterCell = (x, y) => {
