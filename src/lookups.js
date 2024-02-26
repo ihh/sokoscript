@@ -119,4 +119,16 @@ const charClassLookup = tabulateOperators (Object.keys(neighborhood), (nh) => ta
 // precompute char->vector mapping
 const charVecLookup = tabulateCharFunc (char2vec);
 
-export { charPermLookup, charLookup, charClassLookup, charVecLookup, vec2char, int2char, dirs };
+// precompute char->degree rotation mapping
+const charRotLookup = {
+    [vec2char([0,-1])]: 0,
+    [vec2char([1,-1])]: 45,
+    [vec2char([1,0])]: 90,
+    [vec2char([1,1])]: 135,
+    [vec2char([0,1])]: 180,
+    [vec2char([-1,1])]: 225,
+    [vec2char([-1,0])]: 270,
+    [vec2char([-1,-1])]: 315
+};
+
+export { charPermLookup, charLookup, charClassLookup, charVecLookup, vec2char, int2char, dirs, charRotLookup };

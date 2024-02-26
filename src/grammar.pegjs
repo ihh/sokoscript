@@ -161,7 +161,6 @@ PrimaryVecExpr
   / "$" group:NonZeroInteger "#" char:NonZeroInteger { return { op: "state", group, char } }
   / "(" expr:AdditiveVecExpr ")" { return expr }
 
-
 LhsNbrSeq
  = _ addr:DirOrNbrAddr _ t:WildLhsTerm s:LhsNbrSeq { return [{ addr, ...t }].concat(s) }
  / _ addr:DirOrNbrAddr _ t:WildLhsTerm { return [{ addr, ...t }] }

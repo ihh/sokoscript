@@ -73,7 +73,6 @@ class Matcher {
       case '-':
         return lookups.charPermLookup.vecSub[this.computeStateChar(t.right)][this.computeStateChar(t.left)];
       case '*':
-      case '*':
         return lookups.charPermLookup.matMul[t.left.matrix][this.computeStateChar(t.right)];
       case 'location':
         return lookups.vec2char (this.termAddr[t.group-1]);
@@ -167,7 +166,7 @@ class Matcher {
 const applyTransformRule = (board, x, y, dir, rule) => {
   const updates = transformRuleUpdate (board, x, y, dir, rule);
   if (updates !== null)
-    updates.forEach ((update) => board.setCell (...update))
+    updates.forEach ((update) => update && board.setCell (...update))
   return !!updates;
 }
 

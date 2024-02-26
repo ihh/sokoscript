@@ -1,11 +1,11 @@
 import { useState, useRef, useEffect } from 'react';
-import useBoardUtils from './boardUtils.js';
-import { fromString, fromRgba } from 'css-color-converter';
+import { useBoardUtils, focusCssColor } from './boardUtils.js';
+import { fromString } from 'css-color-converter';
 import { xy2index } from '../soko/board.js';
 
 export default function TiledBoard(props) {
-    let { size, pixelsPerCell, cell, types, icons, onPaint, background, focusRect, ...otherProps } = props;
-    const { onMouseDown, onMouseUp, onMouseEnterCell } = useBoardUtils({onPaint});
+    let { size, pixelsPerCell, cell, types, icons, onPaint, onHover, background, focusRect, ...otherProps } = props;
+    const { onMouseDown, onMouseUp, onMouseLeave, onMouseEnterCell } = useBoardUtils({onPaint,onHover});
 
     const canvasRef = useRef(null);    
 
@@ -14,8 +14,7 @@ export default function TiledBoard(props) {
         const cssColor = icon?.color || icon?.defaultColor;
         return fromString(cssColor).toRgbaArray();
     });
-    const focusRectRgbaArray = typeRgbaArray[0].slice(0,3).map((c)=>c^0xc0).concat([255]);
-    const focusRectCssColor = fromRgba(focusRectRgbaArray).toHexString();
+    const focusRectCssColor = focusCssColor (icons);
 
     let buffer = new Uint8ClampedArray(size*size*4);
     for (let x = 0; x < size; x++)
@@ -52,5 +51,5 @@ export default function TiledBoard(props) {
     }
 
     pixelsPerCell = pixelsPerCell || 1;
-    return (<div><canvas ref={canvasRef} width={size} height={size} style={{width:size*pixelsPerCell,height:size*pixelsPerCell}} {...otherProps} onMouseDown={onMouseDown()} onMouseUp={onMouseUp} onMouseLeave={onMouseUp} onMouseMove={onMouseMove}/></div>);
+    return (<div><canvas ref={canvasRef} width={size} height={size} style={{width:size*pixelsPerCell,height:size*pixelsPerCell}} {...otherProps} onMouseDown={onMouseDown()} onMouseUp={onMouseUp} onMouseLeave={onMouseLeave} onMouseMove={onMouseMove}/></div>);
 }

@@ -10,6 +10,9 @@ const defaultRngSeed = 5489;
 
 const xy2index = (x, y, size) => (((y % size) + size) % size) * size + (((x % size) + size) % size);
 
+const bigIntMax = (...args) => args.reduce((m, e) => e > m ? e : m);
+const bigIntMin = (...args) => args.reduce((m, e) => e < m ? e : m);
+
 // Time-efficient data structure for storing a set of ints in the range [0,n) where n is a power of 2
 // Uses 2n memory.
 // Counting total number of elements is an O(1) operation
@@ -156,6 +159,12 @@ class Board {
         this.setCell (x, y, { type: typeIdx, state, meta });
     }
 
+    getCellDescriptorString (x, y) {
+        const cell = this.getCell (x, y);
+        const type = this.grammar.types[cell.type];
+        return type + (cell.state ? `/${cell.state}` : '') + (cell. meta ? ` ${JSON.stringify(cell.meta)}` : '');
+    }
+
     totalTypeRates() {
         return this.byType.map ((counter, type) => BigInt(counter.total()) * this.grammar.rateByType[type]);
     }
@@ -289,24 +298,22 @@ class Board {
     evolveToTime (t, hardStop) {
         const million = 1000000;
         while (this.time < t) {
-            const nextSyncTimes = this.grammar.syncPeriods.map ((p) => this.lastEventTime + p - (this.lastEventTime % p));
+            const nextSyncTimes = this.grammar.syncPeriods.map ((p) => p + this.time - (this.time % p));
             const nextTime = bigMin (t, ...nextSyncTimes);
             const nextSyncCategories = this.grammar.syncCategories.filter ((n) => nextSyncTimes[n] === nextTime);
             const nextTimeIsSyncEvent = nextSyncCategories.length > 0;
             this.evolveAsyncToTime (nextTime, hardStop || nextTimeIsSyncEvent);
-            if (nextTimeIsSyncEvent) {
-                const updates = knuthShuffle (this.rng, nextSyncCategories.reduce ((l, nSync) =>
+            if (nextTimeIsSyncEvent)
+                knuthShuffle (this.rng, nextSyncCategories.reduce ((l, nSync) =>
                     l.concat (this.grammar.typesBySyncCategory[nSync].reduce ((l, nType) => {
                         const rules = this.grammar.syncTransform[nSync][nType];
                         return l.concat (this.byType[nType].elements().reduce ((l, index) => {
                             const xy = this.index2xy(index);
                             return l.concat (rules.map ((rule) => [xy,rule]));
                         }, []));
-                    }, [])), [])).reduce ((updates, xy_rule) =>
-                        updates.concat (transformRuleUpdate(this,xy_rule[0][0],xy_rule[0][1],this.randomDir(),xy_rule[1])), []);
-                updates.forEach ((update) => this.setCell (...update));
-            }
-       }
+                    }, [])), [])).forEach ((xy_rule) =>
+                        applyTransformRule(this,xy_rule[0][0],xy_rule[0][1],this.randomDir(),xy_rule[1]));
+        }
     }
 
     // evolve board, processing sync rules and moves

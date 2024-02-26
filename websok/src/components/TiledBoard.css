@@ -1,4 +1,9 @@
+.TiledBoardViewPort {
+    overflow: hidden;
+}
+
 .TiledBoard {
+    position: relative;
     background-color: black;
 }
 

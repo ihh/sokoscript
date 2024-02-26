@@ -26,10 +26,11 @@ const moveRadioId = '=move';
 
 export default function App() {
     let [board, setBoard] = useState(new Board({size:initSize, cell:initCell, types:['_','bee'], grammar:initGrammarText}));
+    let [hoverCell, setHoverCell] = useState({x:0,y:0});
     let [tiledBoardState, setTiledBoardState] = useState({top:0,left:0,pixelsPerTile:32,tilesPerSide:8});
     let [boardTime, setBoardTime] = useState(board.time);
     let [timer, setTimer] = useState(null);
-    let [icons, setIcons] = useState({bee: {name: 'game-icons:bee', color: 'orange'}});
+    let [icons, setIcons] = useState({bee: {name: 'bee', color: 'orange'}});
     let [moveCounter, setMoveCounter] = useState(0);  // hacky way to force updates without cloning Board object
     let [selectedType, setSelectedType] = useState(undefined);
     let [grammarText, setGrammarText] = useState(initGrammarText);
@@ -77,18 +78,22 @@ export default function App() {
 
     const onPauseRestart = () => {
       if (timer) {
-        clearInterval(timer);
+        clearTimeout(timer);
         setTimer(null);
       } else {
-        setTimer(setInterval(() => {
-          let queuedMoveList = [];
-          board.evolveAndProcess (board.time + boardTimeInterval, queuedMoveList, false);
-          setBoardTime(board.time);
-        }, timerInterval));
+        const timerFunc = () => {
+          window.requestIdleCallback (() => {
+            let queuedMoveList = [];
+            board.evolveAndProcess (board.time + boardTimeInterval, queuedMoveList, false);
+            setBoardTime(board.time);
+            setTimer (setTimeout(timerFunc, timerInterval));
+          })
+        };
+        setTimer (setTimeout(timerFunc, timerInterval));
       }
     };
 
-    const onPaint = (x, y) => {
+    const onPaint = ({ x, y }) => {
       if (selectedType === undefined) return;
       board.setCellTypeByName(x, y, selectedType);
       setBoard(board);
@@ -114,12 +119,14 @@ return (
   types={types} 
   icons={icons} 
   onPaint={onPaint} 
+  onHover={setHoverCell}
   onDrag={onDrag}
   pixelsPerTile={tiledBoardState.pixelsPerTile} 
   tilesPerSide={tiledBoardState.tilesPerSide} 
   top={tiledBoardState.top}
   left={tiledBoardState.left}
   background={background}/>
+  <span>{hoverCell ? board.getCellDescriptorString(hoverCell.x,hoverCell.y) : (<i>Hover over cell to see state</i>)}</span>
 <PixelMap 
   size={boardJson.size} 
   cell={boardJson.cell} 
@@ -139,9 +146,10 @@ return (
     <td><span><label><input type="radio" name="palette" id={type} checked={selectedType===type} onChange={(evt)=>{evt.target.checked && setSelectedType(type)}}/></label></span></td>
     <td><label htmlFor={type}><span className="paletteTypeIcon"><Tile type={type} value={type} icon={icons[type]}/></span></label></td>
     <td><label htmlFor={type}><span className="paletteTypeName">{type==='_'?(<i>empty</i>):type}</span></label></td>
-    <td><label htmlFor={type}><span className="paletteTypeCount">{typeCount[type]}</span></label></td>
+    <td><label htmlFor={type}><span className="paletteTypeCount">({typeCount[type]})</span></label></td>
     <td><DebounceInput element={Input} debounceTimeout={500} value={icons[type].color} placeholder={type==='_'?defaultBackgroundColor:icons[type].defaultColor} onChange={(evt)=>updateIcon(type,'color',evt.target.value)}/></td>
     <td>{type==='_'?'':<DebounceInput element={Input} debounceTimeout={500} value={icons[type].name} placeholder="Icon name" onChange={(evt)=>updateIcon(type,'name',evt.target.value)}/>}</td>
+    <td>{type==='_'?'':(<span className="paletteRotationCheckbox"><input type="checkbox" defaultChecked={!!icons[type].rotate} id={type+'-rotate'} onClick={(evt)=>updateIcon(type,'rotate',!icons[type].rotate)}/><label htmlFor={type+'-rotate'}>Rotate</label></span>)}</td>
   </tr>))}
   <tr>
     <td><span><label><input type="radio" name="palette" id={moveRadioId} checked={typeof(selectedType)==='undefined'} onChange={(evt)=>{evt.target.checked && setSelectedType(undefined)}}/></label></span></td>

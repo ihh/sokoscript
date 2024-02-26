@@ -1,7 +1,8 @@
 import { useState } from 'react';
+import { fromString, fromRgba } from 'css-color-converter';
 
-export default function useBoardUtils (opts) {
-    const { onPaint, onDrag } = opts;
+const useBoardUtils = (opts) => {
+    const { onPaint, onHover, onDrag } = opts;
 
     let [mouseState, setMouseState] = useState({mouseDown:false});
     let [mouseCell, setMouseCell] = useState({});
@@ -10,9 +11,13 @@ export default function useBoardUtils (opts) {
         const xOrig = evt.clientX;
         const yOrig = evt.clientY;
         setMouseState({mouseDown:true,xOrig,yOrig,stateAtMouseDown});
-        onPaint && onPaint(mouseCell.x, mouseCell.y);
+        onPaint && onPaint({ x: mouseCell.x, y: mouseCell.y });
     };
     const onMouseUp = () => setMouseState({mouseDown:false});
+    const onMouseLeave = () => {
+        onHover && onHover(undefined);
+        onMouseUp();
+    };
     const onMouseMove = (evt) => {
         if (mouseState.mouseDown && onDrag) {
             const x = evt.clientX;
@@ -22,8 +27,18 @@ export default function useBoardUtils (opts) {
     }
     const onMouseEnterCell = (x, y) => {
         setMouseCell ({x, y});
-        mouseState.mouseDown && onPaint && onPaint(x, y); 
+        mouseState.mouseDown && onPaint && onPaint({x, y}); 
+        !mouseState.mouseDown && onHover && onHover({x, y});
     }
 
-    return { onMouseDown, onMouseUp, onMouseMove, onMouseEnterCell };
+    return { onMouseDown, onMouseUp, onMouseMove, onMouseLeave, onMouseEnterCell };
 }
+
+const focusCssColor = (icons) => {
+    const bg = fromString(icons._.color || icons._.defaultColor).toRgbaArray();
+    const focusRectRgbaArray = bg.slice(0,3).map((c)=>c^0xc0).concat([255]);
+    return fromRgba(focusRectRgbaArray).toHexString();
+}
+
+
+export { useBoardUtils, focusCssColor };
