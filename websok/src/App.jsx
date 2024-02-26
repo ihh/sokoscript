@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import Textarea from 'rc-textarea';
+import Input from 'rc-input';
 import DebounceInput from 'react-debounce-input';
 
 import { Board } from './soko/board.js';
@@ -28,14 +29,21 @@ export default function App() {
     const typeCount = board.typeCountsIncludingUnknowns();
     const boardJson = board.toJSON();
 
+    const updateIcon = (type, prop, value) => {
+      if (value === '')
+        delete icons[type][prop];
+      else
+        icons[type][prop] = value;
+      setIcons({...icons});
+    }
     let newIcons = {};
     types.forEach ((type) => {
-        if (!icons[type]) {
+        if (!icons[type]?.defaultColor) {
             const hash = hexMD5(type);
             const hue = Math.floor (360 * parseInt(hash.substring(0,3),16) / 0x1000);
             const sat = 30 + Math.floor (40 * parseInt(hash.substring(3,5),16) / 0x100);
             const lev = 30 + Math.floor (40 * parseInt(hash.substring(5,7),16) / 0x100);
-            newIcons[type] = { defaultColor: `hsl(${hue},${sat}%,${lev}%)` };
+            newIcons[type] = { ...icons[type] || {}, defaultColor: `hsl(${hue},${sat}%,${lev}%)` };
         }
     });
     if (Object.keys(newIcons).length > 0)
@@ -69,16 +77,23 @@ return (
 <div>Board</div>
 
 <TiledBoard size={boardJson.size} cell={boardJson.cell} types={types} icons={icons} />
+<div>Time: {(Number(boardTime >> BigInt(22)) / 1024).toFixed(2)}s</div>
 <button onClick={onPauseRestart}>{timer ? "Pause" : "Start"}</button>
-<span>Time: {(Number(boardTime >> BigInt(22)) / 1024).toFixed(2)}s</span>
-<div className="typeCounts">
-  {Object.keys(typeCount).map((type) => type === '?' ? '' : (<div key={`typeCount-${type}`}>
-    <Tile type={type} icon={icons[type]}/>
-    {type==='_'?(<i>none</i>):type} ({typeCount[type]})
-  </div>))}
-</div>
+<fieldset><table className="palette">
+  <tbody>
+  {Object.keys(typeCount).map((type) => type === '?'
+     ? ''
+     : (<tr key={`typeCount-${type}`}>
+    <td><span><label><input type="radio" name="palette" id={type}/></label></span></td>
+    <td><span className="paletteTypeIcon"><label for={type}><Tile type={type} value={type} icon={icons[type]}/></label></span></td>
+    <td><span className="paletteTypeName"><label for={type}>{type==='_'?(<i>empty</i>):type}</label></span></td>
+    <td><span className="paletteTypeCount"><label for={type}>{typeCount[type]}</label></span></td>
+    <td>{type==='_'?'':<DebounceInput element={Input} debounceTimeout={500} value={icons[type].name} placeholder="Icon name" onChange={(evt)=>updateIcon(type,'name',evt.target.value)}/>}</td>
+    <td>{type==='_'?'':<DebounceInput element={Input} debounceTimeout={500} value={icons[type].color} placeholder={icons[type].defaultColor} onChange={(evt)=>updateIcon(type,'color',evt.target.value)}/>}</td>
+  </tr>))}
+  </tbody></table></fieldset>
 <div>Grammar</div>
-<DebounceInput element={Textarea} debounceTimeout={500} autoSize value={grammarText} onChange={onGrammarTextChange}/>
+<DebounceInput element={Textarea} debounceTimeout={500} cols={80} autoSize value={grammarText} onChange={onGrammarTextChange}/>
 <div>{errorMessage}</div>
 </>
 );
