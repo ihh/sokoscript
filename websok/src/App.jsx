@@ -18,11 +18,13 @@ const timerInterval = 20;  // ms
 const boardTimeInterval = (BigInt(timerInterval) << BigInt(32)) / BigInt(1000);
 
 export default function App() {
-    let [grammarText, setGrammarText] = useState(initGrammarText);
-    let [icons, setIcons] = useState({bee: {name: 'game-icons:bee', color: 'orange'}});
     let [board, setBoard] = useState(new Board({size:initSize, cell:initCell, types:['_','bee'], grammar:initGrammarText}));
     let [boardTime, setBoardTime] = useState(board.time);
     let [timer, setTimer] = useState(null);
+    let [icons, setIcons] = useState({bee: {name: 'game-icons:bee', color: 'orange'}});
+    let [moveCounter, setMoveCounter] = useState(0);  // hacky way to force updates without cloning Board object
+    let [selectedType, setSelectedType] = useState(undefined);
+    let [grammarText, setGrammarText] = useState(initGrammarText);
     let [errorMessage, setErrorMessage] = useState(undefined);
 
     const { types } = board.typesIncludingUnknowns();
@@ -72,11 +74,18 @@ export default function App() {
       }
     };
 
+    const onPaint = (x, y) => {
+      if (selectedType === undefined) return;
+      board.setCellTypeByName(x, y, selectedType);
+      setBoard(board);
+      setMoveCounter(moveCounter+1);
+    };
+
 return (
 <>
 <div>Board</div>
 
-<TiledBoard size={boardJson.size} cell={boardJson.cell} types={types} icons={icons} />
+<TiledBoard size={boardJson.size} cell={boardJson.cell} types={types} icons={icons} onPaint={onPaint} />
 <div>Time: {(Number(boardTime >> BigInt(22)) / 1024).toFixed(2)}s</div>
 <button onClick={onPauseRestart}>{timer ? "Pause" : "Start"}</button>
 <fieldset><table className="palette">
@@ -84,10 +93,10 @@ return (
   {Object.keys(typeCount).map((type) => type === '?'
      ? ''
      : (<tr key={`typeCount-${type}`}>
-    <td><span><label><input type="radio" name="palette" id={type}/></label></span></td>
-    <td><span className="paletteTypeIcon"><label for={type}><Tile type={type} value={type} icon={icons[type]}/></label></span></td>
-    <td><span className="paletteTypeName"><label for={type}>{type==='_'?(<i>empty</i>):type}</label></span></td>
-    <td><span className="paletteTypeCount"><label for={type}>{typeCount[type]}</label></span></td>
+    <td><span><label><input type="radio" name="palette" id={type} checked={selectedType===type} onChange={(evt)=>{evt.target.checked && setSelectedType(type)}}/></label></span></td>
+    <td><label htmlFor={type}><span className="paletteTypeIcon"><Tile type={type} value={type} icon={icons[type]}/></span></label></td>
+    <td><label htmlFor={type}><span className="paletteTypeName">{type==='_'?(<i>empty</i>):type}</span></label></td>
+    <td><label htmlFor={type}><span className="paletteTypeCount">{typeCount[type]}</span></label></td>
     <td>{type==='_'?'':<DebounceInput element={Input} debounceTimeout={500} value={icons[type].name} placeholder="Icon name" onChange={(evt)=>updateIcon(type,'name',evt.target.value)}/>}</td>
     <td>{type==='_'?'':<DebounceInput element={Input} debounceTimeout={500} value={icons[type].color} placeholder={icons[type].defaultColor} onChange={(evt)=>updateIcon(type,'color',evt.target.value)}/>}</td>
   </tr>))}

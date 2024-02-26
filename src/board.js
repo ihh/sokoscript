@@ -146,6 +146,16 @@ class Board {
         this.cell[index] = newValue;
     }
 
+    setCellTypeByName (x, y, type, state, meta) {
+        let typeIdx = this.grammar.typeIndex[type];
+        if (typeof(typeIdx) === 'undefined') {
+            meta = {...meta||{},type};
+            typeIdx = this.grammar.unknownType;
+        }
+        state = state || '';
+        this.setCell (x, y, { type: typeIdx, state, meta });
+    }
+
     totalTypeRates() {
         return this.byType.map ((counter, type) => BigInt(counter.total()) * this.grammar.rateByType[type]);
     }
@@ -240,14 +250,8 @@ class Board {
                     if (typeof(cell.owner) === 'undefined' || user === cell.owner || user === Board.owner)
                         if (typeof(meta?.owner) === 'undefined' || user === meta.owner)
                             if (typeof(oldType) === 'undefined' || this.grammar.types[cell.type] === oldType)
-                                if (typeof(oldState === 'undefined' || cell.state === oldState)) {
-                                    let typeIdx = this.grammar.typeIndex[type];
-                                    if (typeof(typeIdx) === 'undefined') {
-                                        meta = {...meta||{},type};
-                                        typeIdx = this.grammar.unknownType;
-                                    }
-                                    this.setCell (x, y, { type: typeIdx, state, meta });
-                                }
+                                if (typeof(oldState === 'undefined' || cell.state === oldState))
+                                    this.setCellTypeByName (x, y, type, state, meta);
                 }
             })
         } else if (move.type === 'grammar') {
