@@ -25,7 +25,8 @@ export default function TiledBoard(props) {
     const yIndex = new Array(tilesPerSide+1).fill(0).map ((_, y) => (y + top) % size);
 
     const [fontSize, innerSize, outerSize, offset] = [1, tilesPerSide+1, tilesPerSide, -1/2].map ((s) => s * pixelsPerTile);
-    const focusColor = focusCssColor (icons);
+    const focusColor = focusCssColor (icons, 1);
+    const idColor = focusCssColor (icons, .5);
 
 return (
 <>
@@ -37,6 +38,7 @@ return (
         const typeIndex = typeof(xyCell) === 'number' ? xyCell : xyCell[0];
         const type = types[typeIndex];
         const state = typeof(xyCell) === 'number' ? '' : xyCell[1];
+        const meta = typeof(xyCell) === 'number' ? undefined : xyCell[2];
         const icon = icons[type];
         return (<Tile 
             key={'tiledBoardRow'+y+'Cell'+x} 
@@ -44,7 +46,9 @@ return (
             icon={icon} 
             type={type} 
             state={state} 
+            meta={meta}
             focusColor={focusColor}
+            idColor={idColor}
             hover={hoverCell?.x === x && hoverCell?.y === y}
             />)
     })}

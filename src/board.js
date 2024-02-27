@@ -159,11 +159,18 @@ class Board {
     getCellDescriptorString (x, y) {
         const cell = this.getCell (x, y);
         const type = this.grammar.types[cell.type];
-        return type + (cell.state ? `/${cell.state}` : '') + (cell. meta ? ` ${JSON.stringify(cell.meta)}` : '');
+        return type + (cell.state ? `/${cell.state}` : '') + (cell.meta && Object.keys(cell.meta).length ? ` ${JSON.stringify(cell.meta)}` : '');
     }
 
     totalTypeRates() {
         return this.byType.map ((counter, type) => BigInt(counter.total()) * this.grammar.rateByType[type]);
+    }
+
+    getUniqueID(prefix) {
+        const idPrefix = prefix || 'cell';
+        let id;
+        for (id = 1; idPrefix+id in this.byID; ++id);
+        return idPrefix+id;
     }
 
     // Random waiting time until next event, and selection of next event

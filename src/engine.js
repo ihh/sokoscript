@@ -133,23 +133,13 @@ class Matcher {
         return this;
     }
 
-    stripUniqueMetadata (cell) {
-        if (cell.meta) {
-          ['id','owner'].forEach ((prop) => delete cell.meta[prop])
-          if (!Object.keys(cell.meta).length)
-            delete cell.meta;
-        }
-    }
-
     newCell (t) {
         if (t.op === 'group') {
             const { type, state, meta } = this.termCell[t.group-1];
-            this.stripUniqueMetadata (this.termCell[t.group-1]);
             return { type, state, meta }
         }
         if (t.op === 'prefix') {
             const { type, state, meta } = this.termCell[t.group-1];
-            this.stripUniqueMetadata (this.termCell[t.group-1]);
             const newState = t.state ? t.state.map(this.computeStateChar.bind(this)).join('') : '';
             return { type, state: newState, meta }
         }
@@ -165,14 +155,27 @@ class Matcher {
 
 const applyTransformRule = (board, x, y, dir, rule) => {
   const updates = transformRuleUpdate (board, x, y, dir, rule);
-  if (updates !== null)
+  if (updates)
     updates.forEach ((update) => update && board.setCell (...update))
   return !!updates;
 }
 
+const stripDuplicateMetadata = (domCell, subCell) => {
+  if (domCell.meta && subCell.meta) {
+    ['id','owner'].forEach ((prop) => domCell.meta[prop] === subCell.meta[prop] && delete subCell.meta[prop])
+    if (!Object.keys(subCell.meta).length)
+      delete subCell.meta;
+  }
+}
+
 const transformRuleUpdate = (board, x, y, dir, rule) => {
   const matcher = rule.lhs.reduce ((matcher, term, pos) => matcher.matchLhsCell(term,pos), new Matcher (board, x, y, dir) );
-  return matcher.failed ? null : rule.rhs.map ((term, pos) => matcher.newCellUpdate(term,pos));
+  if (matcher.failed) return null;
+  let update = rule.rhs.map ((term, pos) => matcher.newCellUpdate(term,pos));
+  for (let i = 0; i < update.length-1; ++i)
+    for (let j = i + 1; j < update.length; ++j)
+      stripDuplicateMetadata (update[i][2], update[j][2]);
+  return update;
 }
 
 export { applyTransformRule, transformRuleUpdate };

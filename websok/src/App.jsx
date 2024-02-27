@@ -19,7 +19,7 @@ import './App.css';
 
 const initSize = 16;
 const initCell = new Array(initSize**2).fill(0).map((_,i) => i%7 ? 0 : 1);
-const initGrammarText = 'bee _ : _ bee.\n';
+const initGrammarText = 'bee _ : $2 $1.\n';
 
 const timerInterval = 20;  // ms
 const boardTimeInterval = (BigInt(timerInterval) << BigInt(32)) / BigInt(1000);
@@ -47,6 +47,7 @@ export default function App() {
     let [moveCounter, setMoveCounter] = useState(0);  // hacky way to force updates without cloning Board object
     let [selectedType, setSelectedType] = useState(undefined);
     let [typePaintState, setTypePaintState] = useState({});
+    let [paintId, setPaintId] = useState(undefined);
     let [grammarText, setGrammarText] = useState(initGrammarText);
     let [errorMessage, setErrorMessage] = useState(undefined);
 
@@ -109,7 +110,14 @@ export default function App() {
     const paintState = (type) => (typePaintState[type] || '').replaceAll(/@([NSEW])/g, (_m,g) => charLookup.absDir[g]);
 
     const paint = ({ x, y }) => {
-      board.setCellTypeByName(x, y, selectedType, paintState(selectedType));
+      let meta;
+      if (selectedType !== '_') {
+        if (paintId === 'player')
+          meta = { id: 'Player' };  // uppercase avoids collision with any type named 'player'
+        else if (paintId === 'unique')
+          meta = { id: board.getUniqueID(selectedType) };
+      }
+      board.setCellTypeByName(x, y, selectedType, paintState(selectedType), meta);
       setBoard(board);
       setMoveCounter(moveCounter+1);
     };
@@ -194,7 +202,12 @@ return (
       ? (<span>Click on map to
          {selectedType === '_'
           ? ' erase'
-          : (<> paint {selectedType}/<DebounceInput element={Input} debounceTimeout={500} value={typePaintState[selectedType] || ''} placeholder={'@N, @S, @E, @W...'} onChange={(evt)=>setTypePaintState({...typePaintState,[selectedType]:evt.target.value})}/></>)}
+          : (<> paint {selectedType}/<DebounceInput element={Input} debounceTimeout={500} value={typePaintState[selectedType] || ''} placeholder={'@N, @S, @E, @W...'} onChange={(evt)=>setTypePaintState({...typePaintState,[selectedType]:evt.target.value})}/>
+          <select id="=id" value={paintId} onChange={(evt)=>setPaintId(evt.target.value)}>
+            <option value="anon">as anonymous cell</option>
+            <option value="player">as player</option>
+            <option value="unique">with unique ID</option>
+          </select></>)}
           </span>)
       : (<span>Drag map to move</span>)}
 </div>
