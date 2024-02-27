@@ -58,6 +58,8 @@
   const minusVec = (arg) => ({ op: "-", left: { op: "vector", x: 0, y: 0 }, right: arg });
 }
 
+RuleSetTop = _ RuleSet
+
 RuleSet
  = r:Rule _ "." _ s:RuleSet &{ return validateInheritance(r,s,error) } { return [r].concat(s) }
  / r:Rule _ "." _ { return [r] }
