@@ -2,7 +2,7 @@
   "type": "module",
   "scripts": {
     "test": "mocha",
-    "build-parser": "node -e \"fs.writeFileSync(process.argv[1],require('pegjs').generate(fs.readFileSync(process.argv[2]).toString(),{output:'source',format:'commonjs'}).replace('module.exports =','export').replace(/(?<func>\\\\S+):\\s+(peg\\\\$\\k<func>)/g,(_m,e,f)=>f+' as '+e))\" src/grammar.js src/grammar.pegjs"
+    "build-parser": "node -e \"fs.writeFileSync(process.argv[1],require('pegjs').generate(fs.readFileSync(process.argv[2]).toString(),{output:'source',format:'commonjs'}).replace('module.exports =','export').replace(/\\b(?<func>\\\\S+):\\s+(peg\\\\$\\k<func>)/g,(_m,e,f)=>f+' as '+e))\" src/grammar.js src/grammar.pegjs"
   },
   "devDependencies": {
     "aws-sdk": "^2.1488.0",
