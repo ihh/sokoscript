@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useCallback } from 'react';
 import Textarea from 'rc-textarea';
 import Input from 'rc-input';
 import DebounceInput from 'react-debounce-input';
@@ -28,24 +28,10 @@ const defaultBackgroundColor = 'black';
 
 const moveIcon = "oi:move";
 
-// state management has got a bit hacky here, with moveCounter and boardTime existing basically to force updates
-// also, the timers and board objects are a bit hacky, would be better to have one object that contains all state which never needs to be updated through useState callbacks
-const timerFunc = ({ board, timers, setBoardTime }) => () => {
-  window.requestIdleCallback (() => {
-    if (timers.boardTimer) {
-      let queuedMoveList = [];
-      board.evolveAndProcess (board.time + boardTimeInterval, queuedMoveList, false);
-      setBoardTime(board.time);
-      timers.boardTimer = setTimeout(timerFunc({ board, timers, setBoardTime }), timerInterval);
-    }
-  })
-};
-
 export default function App() {
     let [board, setBoard] = useState(new Board({size:initSize, cell:initCell, types:['_','bee'], grammar:initGrammarText}));
-    let [hoverCell, setHoverCell] = useState({x:0,y:0});
+    let [hoverCell, setHoverCell] = useState(undefined);
     let [navState, setNavState] = useState({top:0,left:0,pixelsPerTile:32,tilesPerSide:8});
-    let [boardTime, setBoardTime] = useState(board.time);
     let [timers] = useState({boardTimer:null});
     let [icons, setIcons] = useState({bee: {name: 'bee', color: 'orange'}});
     let [moveCounter, setMoveCounter] = useState(0);  // hacky way to force updates without cloning Board object
@@ -59,13 +45,16 @@ export default function App() {
     const typeCount = board.typeCountsIncludingUnknowns();
     const boardJson = board.toJSON();
 
-    const updateIcon = (type, prop, value) => {
+    const forceUpdate = useCallback (() => setMoveCounter(moveCounter+1), [moveCounter]);
+
+    const updateIcon = useCallback ((type, prop, value) => {
       if (value === '')
         delete icons[type][prop];
       else
         icons[type][prop] = value;
       setIcons({...icons});
-    }
+    }, [icons]);
+
     let newIcons = {};
     types.forEach ((type) => {
         if (!icons[type]?.defaultColor) {
@@ -85,7 +74,7 @@ export default function App() {
 
     const background = icons['_']?.color || defaultBackgroundColor;
 
-    const onGrammarTextChange = (e) => {
+    const onGrammarTextChange = useCallback ((e) => {
         const { target: { value: currentValue } } = e;
         const isValid = parseOrUndefined(currentValue,{error:setErrorMessage});
         if (isValid) {
@@ -93,29 +82,42 @@ export default function App() {
           setErrorMessage(undefined);
         }
         setGrammarText(currentValue);
-      };
+      }, [board]);
 
-    const pause = () => {
-      clearTimeout(timers.boardTimer);
-      timers.boardTimer = null;
-      setMoveCounter(moveCounter+1);
-    }
-    const resume = (board) => {
+    const startTimer = useCallback (() => {
+      timers.boardTimer = setTimeout (timers.timerFunc, timerInterval);
+    }, [timers]);
+    const stopTimer = useCallback (() => {
       if (timers.boardTimer)
         clearTimeout(timers.boardTimer);
-      timers.boardTimer = setTimeout(timerFunc({board,timers,setBoardTime}), timerInterval);
-      setMoveCounter(moveCounter+1);
-    }
-    const onPauseRestart = () => timers.boardTimer ? pause() : resume(board);
+      timers.boardTimer = null;
+    }, [timers]);
+    const pause = useCallback (() => {
+      stopTimer();
+      forceUpdate();
+    }, [stopTimer, forceUpdate]);
+    const resume = useCallback (() => {
+      stopTimer();
+      startTimer();
+      forceUpdate();
+    }, [stopTimer, startTimer, forceUpdate]);
+    timers.timerFunc = useCallback (() => {
+      let queuedMoveList = [];
+      board.evolveAndProcess (board.time + boardTimeInterval, queuedMoveList, false);
+      startTimer();
+      forceUpdate();
+    }, [board, startTimer, forceUpdate]);
+    
+    const onPauseRestart = timers.boardTimer ? pause : resume;
 
-    const wrapCoord = (coord) => {
+    const wrapCoord = useCallback ((coord) => {
       while (coord < 0) coord += board.size;
       return coord % board.size;
-    };
+    }, [board.size]);
 
-    const paintState = (type) => (typePaintState[type] || '').replaceAll(/@([NSEW])/g, (_m,g) => charLookup.absDir[g]);
+    const paintState = useCallback ((type) => (typePaintState[type] || '').replaceAll(/@([NSEW])/g, (_m,g) => charLookup.absDir[g]), [typePaintState]);
 
-    const paint = ({ x, y }) => {
+    const paint = useCallback (({ x, y }) => {
       let meta;
       if (selectedType !== '_') {
         if (paintId === 'player')
@@ -124,29 +126,30 @@ export default function App() {
           meta = { id: board.getUniqueID(selectedType) };
       }
       board.setCellTypeByName(x, y, selectedType, paintState(selectedType), meta);
-      setBoard(board);
-      setMoveCounter(moveCounter+1);
-    };
-    const tiledBoardPaint = ({ x, y }) => {
+      forceUpdate();
+    }, [selectedType, paintState, paintId, board, forceUpdate]);
+
+    const tiledBoardPaint = useCallback (({ x, y }) => {
       if (selectedType)
         paint({ x, y });
       else {
         // TODO: select cell
       }
-    };
-    const pixelMapPaint = ({ x, y }) => {
+    }, [selectedType, paint]);
+
+    const pixelMapPaint = useCallback (({ x, y }) => {
       if (selectedType)
         paint({ x, y });
       else {
         const offset = navState.tilesPerSide >> 1;
         setNavState ({ ...navState, left: wrapCoord (x - offset), top: wrapCoord (y - offset) })
       }
-    };
+    }, [navState, wrapCoord, selectedType, paint]);
 
-    const onDrag = (dx, dy) => {
+    const onDrag = useCallback ((dx, dy) => {
       if (selectedType !== undefined) return;
       setNavState ({...navState, left: wrapCoord(navState.left - Math.round(dx)), top: wrapCoord(navState.top - Math.round(dy))});
-    };
+    }, [navState, wrapCoord, selectedType]);
 
     const mapPixelsPerCell = Math.max (1, Math.floor (navState.pixelsPerTile * navState.tilesPerSide / board.size));
     const cursor = typeof(selectedType) === 'undefined' ? 'grab' : 'crosshair';
@@ -184,7 +187,7 @@ return (
   background={background}/>
 </div>
   <span>{hoverCell ? (`(${hoverCell.x},${hoverCell.y}) ` + board.getCellDescriptorString(hoverCell.x,hoverCell.y)) : (<i>Hover over cell to see state</i>)}</span>
-<div>Time: {(Number(boardTime >> BigInt(22)) / 1024).toFixed(2)}s</div>
+<div>Time: {(Number(board.time >> BigInt(22)) / 1024).toFixed(2)}s</div>
 <button onClick={onPauseRestart}>{timers.boardTimer ? "Pause" : "Start"}</button>
 <fieldset><table className="palette">
   <tbody>

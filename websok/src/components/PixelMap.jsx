@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect, useCallback } from 'react';
 import { useBoardUtils, focusCssColor } from './boardUtils.js';
 import { fromString } from 'css-color-converter';
 import { xy2index } from '../soko/board.js';
@@ -43,12 +43,12 @@ export default function PixelMap(props) {
         }
     }, [size, cell, types, icons]);
     
-    const onMouseMove = (evt) => {
+    const onMouseMove = useCallback ((evt) => {
         const rect = evt.target.getBoundingClientRect();
         const x = Math.floor((evt.clientX - rect.left) / pixelsPerCell);
         const y = Math.floor((evt.clientY - rect.top) / pixelsPerCell);
         onMouseEnterCell(x,y);
-    }
+    }, [pixelsPerCell, onMouseEnterCell]);
 
     pixelsPerCell = pixelsPerCell || 1;
     return (<div className="PixelMap" style={{cursor}}><canvas ref={canvasRef} width={size} height={size} style={{width:size*pixelsPerCell,height:size*pixelsPerCell}} {...otherProps} onMouseDown={onMouseDown()} onMouseUp={onMouseUp} onMouseLeave={onMouseLeave} onMouseMove={onMouseMove}/></div>);

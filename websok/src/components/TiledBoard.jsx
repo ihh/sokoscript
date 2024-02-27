@@ -1,4 +1,4 @@
-import { useState, useRef } from 'react';
+import { useState, useRef, useCallback } from 'react';
 import Tile from './Tile.jsx';
 import { useBoardUtils, focusCssColor } from './boardUtils.js';
 import { xy2index } from '../soko/board.js';
@@ -7,18 +7,12 @@ import './TiledBoard.css';
 export default function TiledBoard(props) {
     const { size, cell, types, icons, onPaint, onDrag, onHover, pixelsPerTile, tilesPerSide, top, left, hoverCell, cursor, background } = props;
 
-    const onHoverWrap = (x, y) => {
-        x = x / pixelsPerTile + left;
-        y = y / pixelsPerTile + top;
-        if (onHover)
-            onHover(x,y);
-    };
-    const onDragWrap = (x, y, stateAtMouseDown) => {
+    const onDragWrap = useCallback ((x, y, stateAtMouseDown) => {
         x = x / pixelsPerTile + left - stateAtMouseDown.left;
         y = y / pixelsPerTile + top - stateAtMouseDown.top;
         if (onDrag)
             onDrag(x,y);
-    };
+    }, [pixelsPerTile, left, top, onDrag]);
     const { onMouseDown, onMouseUp, onMouseLeave, onMouseMove, onMouseEnterCell } = useBoardUtils({onPaint,onHover,onDrag:onDragWrap});
 
     const xIndex = new Array(tilesPerSide+1).fill(0).map ((_, x) => (x + left) % size);
