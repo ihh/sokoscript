@@ -4,7 +4,7 @@ import { fromString } from 'css-color-converter';
 import { xy2index } from '../soko/board.js';
 
 export default function PixelMap(props) {
-    let { size, pixelsPerCell, cell, types, icons, onPaint, onHover, background, focusRect, ...otherProps } = props;
+    let { size, pixelsPerCell, cell, types, icons, onPaint, onHover, background, focusRect, cursor, ...otherProps } = props;
     const { onMouseDown, onMouseUp, onMouseLeave, onMouseEnterCell } = useBoardUtils({onPaint,onHover});
 
     const canvasRef = useRef(null);    
@@ -14,7 +14,7 @@ export default function PixelMap(props) {
         const cssColor = icon?.color || icon?.defaultColor;
         return fromString(cssColor).toRgbaArray();
     });
-    const focusRectCssColor = focusCssColor (icons);
+    const focusRectCssColor = focusCssColor (icons, .5);
 
     let buffer = new Uint8ClampedArray(size*size*4);
     for (let x = 0; x < size; x++)
@@ -36,10 +36,10 @@ export default function PixelMap(props) {
         idata.data.set(buffer);
         context.putImageData(idata, 0, 0);
         if (focusRect) {
-            context.strokeStyle = focusRectCssColor;
+            context.fillStyle = focusRectCssColor;
             for (let x = -size; x < 2*size; x += size)
                 for (let y = -size; y < 2*size; y += size)
-                    context.strokeRect (focusRect.left + x, focusRect.top + y, focusRect.width - 1, focusRect.height - 1);
+                    context.fillRect (focusRect.left + x, focusRect.top + y, focusRect.width - 1, focusRect.height - 1);
         }
     }, [size, cell, types, icons]);
     
@@ -51,5 +51,5 @@ export default function PixelMap(props) {
     }
 
     pixelsPerCell = pixelsPerCell || 1;
-    return (<div className="PixelMap"><canvas ref={canvasRef} width={size} height={size} style={{width:size*pixelsPerCell,height:size*pixelsPerCell}} {...otherProps} onMouseDown={onMouseDown()} onMouseUp={onMouseUp} onMouseLeave={onMouseLeave} onMouseMove={onMouseMove}/></div>);
+    return (<div className="PixelMap" style={{cursor}}><canvas ref={canvasRef} width={size} height={size} style={{width:size*pixelsPerCell,height:size*pixelsPerCell}} {...otherProps} onMouseDown={onMouseDown()} onMouseUp={onMouseUp} onMouseLeave={onMouseLeave} onMouseMove={onMouseMove}/></div>);
 }

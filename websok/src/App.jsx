@@ -8,11 +8,12 @@ import { Board } from './soko/board.js';
 import { parseOrUndefined } from './soko/gramutil.js';
 import { hexMD5 } from './soko/md5.js';
 import { charLookup } from './soko/lookups.js';
+import { xy2index } from './soko/board.js';
 
 import TiledBoard from './components/TiledBoard.jsx';
 import PixelMap from './components/PixelMap.jsx';
 import Tile from './components/Tile.jsx';
-import { xy2index } from './soko/board.js';
+import BoardSizeSelector from './components/BoardSizeSelector.jsx';
 
 import './App.css';
 
@@ -27,10 +28,19 @@ const defaultBackgroundColor = 'black';
 
 const moveIcon = "oi:move";
 
+const timerFunc = ({ board, setTimer, setBoardTime }) => () => {
+  window.requestIdleCallback (() => {
+    let queuedMoveList = [];
+    board.evolveAndProcess (board.time + boardTimeInterval, queuedMoveList, false);
+    setBoardTime(board.time);
+    setTimer (setTimeout(timerFunc({ board, setTimer, setBoardTime }), timerInterval));
+  })
+};
+
 export default function App() {
     let [board, setBoard] = useState(new Board({size:initSize, cell:initCell, types:['_','bee'], grammar:initGrammarText}));
     let [hoverCell, setHoverCell] = useState({x:0,y:0});
-    let [navState, setNavState] = useState({top:0,left:0,pixelsPerTile:32,tilesPerSide:8,mapPixelsPerCell:4});
+    let [navState, setNavState] = useState({top:0,left:0,pixelsPerTile:32,tilesPerSide:8});
     let [boardTime, setBoardTime] = useState(board.time);
     let [timer, setTimer] = useState(null);
     let [icons, setIcons] = useState({bee: {name: 'bee', color: 'orange'}});
@@ -84,21 +94,12 @@ export default function App() {
       clearTimeout(timer);
       setTimer(null);
     }
-    const onPauseRestart = () => {
+    const resume = (board) => {
       if (timer)
-        pause();
-      else {
-        const timerFunc = () => {
-          window.requestIdleCallback (() => {
-            let queuedMoveList = [];
-            board.evolveAndProcess (board.time + boardTimeInterval, queuedMoveList, false);
-            setBoardTime(board.time);
-            setTimer (setTimeout(timerFunc, timerInterval));
-          })
-        };
-        setTimer (setTimeout(timerFunc, timerInterval));
-      }
-    };
+        clearTimeout(timer);
+      setTimer (setTimeout(timerFunc({board,setTimer,setBoardTime}), timerInterval));
+    }
+    const onPauseRestart = () => timer ? pause() : resume(board);
 
     const wrapCoord = (coord) => {
       while (coord < 0) coord += board.size;
@@ -133,30 +134,14 @@ export default function App() {
       setNavState ({...navState, left: wrapCoord(navState.left - Math.round(dx)), top: wrapCoord(navState.top - Math.round(dy))});
     };
 
-    const onChangeBoardSize = (evt) => {
-      const newSize = parseInt(evt.target.value);
-      if (newSize < board.size) {
-        let nonempty = false;
-        for (let x = newSize; !nonempty && x < board.size; ++x)
-          for (let y = newSize; !nonempty && y < board.size; ++y)
-            if (board.getCell(x,y).type !== 0)
-              nonempty = true;
-        if (nonempty && !window.confirm('Shrink board and lose nonempty cells?'))
-          return;
-      }
-      let cell = new Array(newSize**2).fill(0);
-      for (let x = 0; x < Math.min(newSize,board.size); ++x)
-        for (let y = 0; y < Math.min(newSize,board.size); ++y)
-          cell[xy2index(x,y,newSize)] = boardJson.cell[xy2index(x,y,board.size)];
-      if (timer) pause();
-      setBoard(new Board({...boardJson, size:newSize, cell}));
-      setNavState({...navState,top:navState.top%newSize,left:navState.left%newSize,tilesPerSide:navState.tilesPerSide%newSize});
-    };
+    const mapPixelsPerCell = Math.max (1, Math.floor (navState.pixelsPerTile * navState.tilesPerSide / board.size));
+    const cursor = typeof(selectedType) === 'undefined' ? 'grab' : 'crosshair';
 
 return (
 <>
-<div className="NavigationPanel" style={{height:Math.max(navState.mapPixelsPerCell*board.size,navState.tilesPerSide*navState.pixelsPerTile)+'px'}}>
+<div className="NavigationPanel">
 <TiledBoard
+  board={board}
   size={boardJson.size}
   cell={boardJson.cell}
   types={types} 
@@ -168,19 +153,23 @@ return (
   tilesPerSide={navState.tilesPerSide} 
   top={navState.top}
   left={navState.left}
+  hoverCell={hoverCell}
+  cursor={cursor}
   background={background}/>
 <PixelMap 
+  board={board}
   size={boardJson.size} 
   cell={boardJson.cell} 
   types={types} 
   icons={icons} 
   onPaint={pixelMapPaint} 
   onHover={setHoverCell}
-  pixelsPerCell={navState.mapPixelsPerCell} 
-  focusRect={{top:navState.top,left:navState.left,width:navState.tilesPerSide,height:navState.tilesPerSide}}
+  cursor={cursor}
+  pixelsPerCell={mapPixelsPerCell} 
+  focusRect={{top:navState.top,left:navState.left,width:navState.tilesPerSide+2,height:navState.tilesPerSide+2}}
   background={background}/>
 </div>
-  <span>{hoverCell ? board.getCellDescriptorString(hoverCell.x,hoverCell.y) : (<i>Hover over cell to see state</i>)}</span>
+  <span>{hoverCell ? (`(${hoverCell.x},${hoverCell.y}) ` + board.getCellDescriptorString(hoverCell.x,hoverCell.y)) : (<i>Hover over cell to see state</i>)}</span>
 <div>Time: {(Number(boardTime >> BigInt(22)) / 1024).toFixed(2)}s</div>
 <button onClick={onPauseRestart}>{timer ? "Pause" : "Start"}</button>
 <fieldset><table className="palette">
@@ -209,12 +198,7 @@ return (
           </span>)
       : (<span>Drag map to move</span>)}
 </div>
-<div>
- <label htmlFor="=size">Board size:</label>
- <select id="=size" onChange={onChangeBoardSize} value={board.size}>
-  {[8,16,32,64,128].map((size) => (<option key={`boardSize${size}`} value={size}>{size}</option>))}
- </select>
-</div>
+<BoardSizeSelector board={board} setBoard={setBoard} navState={navState} setNavState={setNavState} pause={pause}/>
 <div>Grammar</div>
 <DebounceInput element={Textarea} debounceTimeout={500} cols={80} autoSize value={grammarText} onChange={onGrammarTextChange}/>
 <div>{errorMessage}</div>

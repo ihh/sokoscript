@@ -28,16 +28,16 @@ const useBoardUtils = (opts) => {
     const onMouseEnterCell = (x, y) => {
         setMouseCell ({x, y});
         mouseState.mouseDown && onPaint && onPaint({x, y}); 
-        !mouseState.mouseDown && onHover && onHover({x, y});
+        onHover && onHover({x, y});
     }
 
     return { onMouseDown, onMouseUp, onMouseMove, onMouseLeave, onMouseEnterCell };
 }
 
-const focusCssColor = (icons) => {
+const focusCssColor = (icons, alpha) => {
     const bg = fromString(icons._.color || icons._.defaultColor).toRgbaArray();
-    const focusRectRgbaArray = bg.slice(0,3).map((c)=>c^0xc0).concat([255]);
-    return fromRgba(focusRectRgbaArray).toHexString();
+    const focusRectRgbaArray = bg.slice(0,3).map((c)=>c^0xc0).concat([typeof(alpha) === 'undefined' ? 1 : alpha]);
+    return fromRgba(focusRectRgbaArray).toRgbString();
 }
 
 

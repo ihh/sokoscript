@@ -5,7 +5,7 @@ import { xy2index } from '../soko/board.js';
 import './TiledBoard.css';
 
 export default function TiledBoard(props) {
-    const { size, cell, types, icons, onPaint, onDrag, onHover, pixelsPerTile, tilesPerSide, top, left, background } = props;
+    const { size, cell, types, icons, onPaint, onDrag, onHover, pixelsPerTile, tilesPerSide, top, left, hoverCell, cursor, background } = props;
 
     const onHoverWrap = (x, y) => {
         x = x / pixelsPerTile + left;
@@ -29,7 +29,7 @@ export default function TiledBoard(props) {
 
 return (
 <>
-<div className="TiledBoard" style={{width:outerSize,height:outerSize}}>
+<div className="TiledBoard" style={{width:outerSize,height:outerSize,cursor}}>
 <div className="TiledBoardInner" onMouseDown={onMouseDown({top,left})} onMouseUp={onMouseUp} onMouseMove={onMouseMove} onMouseLeave={onMouseLeave} style={{fontSize,width:innerSize,height:innerSize,top:offset,left:offset,background}}>
 {yIndex.map((y) => (<div className="tileRow" key={'tiledBoardRow'+y}>
     {xIndex.map((x) => {
@@ -38,7 +38,15 @@ return (
         const type = types[typeIndex];
         const state = typeof(xyCell) === 'number' ? '' : xyCell[1];
         const icon = icons[type];
-        return (<Tile key={'tiledBoardRow'+y+'Cell'+x} onMouseEnter={()=>onMouseEnterCell(x,y)} icon={icon} type={type} state={state} focusColor={focusColor}/>)
+        return (<Tile 
+            key={'tiledBoardRow'+y+'Cell'+x} 
+            onMouseEnter={()=>onMouseEnterCell(x,y)} 
+            icon={icon} 
+            type={type} 
+            state={state} 
+            focusColor={focusColor}
+            hover={hoverCell?.x === x && hoverCell?.y === y}
+            />)
     })}
     </div>))}
 </div>
