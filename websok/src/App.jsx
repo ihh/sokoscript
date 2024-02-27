@@ -28,12 +28,16 @@ const defaultBackgroundColor = 'black';
 
 const moveIcon = "oi:move";
 
-const timerFunc = ({ board, setTimer, setBoardTime }) => () => {
+// state management has got a bit hacky here, with moveCounter and boardTime existing basically to force updates
+// also, the timers and board objects are a bit hacky, would be better to have one object that contains all state which never needs to be updated through useState callbacks
+const timerFunc = ({ board, timers, setBoardTime }) => () => {
   window.requestIdleCallback (() => {
-    let queuedMoveList = [];
-    board.evolveAndProcess (board.time + boardTimeInterval, queuedMoveList, false);
-    setBoardTime(board.time);
-    setTimer (setTimeout(timerFunc({ board, setTimer, setBoardTime }), timerInterval));
+    if (timers.boardTimer) {
+      let queuedMoveList = [];
+      board.evolveAndProcess (board.time + boardTimeInterval, queuedMoveList, false);
+      setBoardTime(board.time);
+      timers.boardTimer = setTimeout(timerFunc({ board, timers, setBoardTime }), timerInterval);
+    }
   })
 };
 
@@ -42,7 +46,7 @@ export default function App() {
     let [hoverCell, setHoverCell] = useState({x:0,y:0});
     let [navState, setNavState] = useState({top:0,left:0,pixelsPerTile:32,tilesPerSide:8});
     let [boardTime, setBoardTime] = useState(board.time);
-    let [timer, setTimer] = useState(null);
+    let [timers] = useState({boardTimer:null});
     let [icons, setIcons] = useState({bee: {name: 'bee', color: 'orange'}});
     let [moveCounter, setMoveCounter] = useState(0);  // hacky way to force updates without cloning Board object
     let [selectedType, setSelectedType] = useState(undefined);
@@ -92,15 +96,17 @@ export default function App() {
       };
 
     const pause = () => {
-      clearTimeout(timer);
-      setTimer(null);
+      clearTimeout(timers.boardTimer);
+      timers.boardTimer = null;
+      setMoveCounter(moveCounter+1);
     }
     const resume = (board) => {
-      if (timer)
-        clearTimeout(timer);
-      setTimer (setTimeout(timerFunc({board,setTimer,setBoardTime}), timerInterval));
+      if (timers.boardTimer)
+        clearTimeout(timers.boardTimer);
+      timers.boardTimer = setTimeout(timerFunc({board,timers,setBoardTime}), timerInterval);
+      setMoveCounter(moveCounter+1);
     }
-    const onPauseRestart = () => timer ? pause() : resume(board);
+    const onPauseRestart = () => timers.boardTimer ? pause() : resume(board);
 
     const wrapCoord = (coord) => {
       while (coord < 0) coord += board.size;
@@ -179,7 +185,7 @@ return (
 </div>
   <span>{hoverCell ? (`(${hoverCell.x},${hoverCell.y}) ` + board.getCellDescriptorString(hoverCell.x,hoverCell.y)) : (<i>Hover over cell to see state</i>)}</span>
 <div>Time: {(Number(boardTime >> BigInt(22)) / 1024).toFixed(2)}s</div>
-<button onClick={onPauseRestart}>{timer ? "Pause" : "Start"}</button>
+<button onClick={onPauseRestart}>{timers.boardTimer ? "Pause" : "Start"}</button>
 <fieldset><table className="palette">
   <tbody>
   {Object.keys(typeCount).map((type) => type === '?'
