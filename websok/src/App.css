@@ -1,0 +1,15 @@
+.NavigationPanel {
+    position: relative;
+}
+
+.NavigationPanel .TiledBoard {
+    position: relative;
+    top: 0;
+    left: 0;
+}
+
+.NavigationPanel .PixelMap {
+    position: absolute;
+    top: 0;
+    right: 0;
+}

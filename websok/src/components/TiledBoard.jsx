@@ -29,8 +29,8 @@ export default function TiledBoard(props) {
 
 return (
 <>
-<div className="TiledBoardViewPort" style={{width:outerSize,height:outerSize}}>
-<div className="TiledBoard" onMouseDown={onMouseDown({top,left})} onMouseUp={onMouseUp} onMouseMove={onMouseMove} onMouseLeave={onMouseLeave} style={{fontSize,width:innerSize,height:innerSize,top:offset,left:offset,background}}>
+<div className="TiledBoard" style={{width:outerSize,height:outerSize}}>
+<div className="TiledBoardInner" onMouseDown={onMouseDown({top,left})} onMouseUp={onMouseUp} onMouseMove={onMouseMove} onMouseLeave={onMouseLeave} style={{fontSize,width:innerSize,height:innerSize,top:offset,left:offset,background}}>
 {yIndex.map((y) => (<div className="tileRow" key={'tiledBoardRow'+y}>
     {xIndex.map((x) => {
         const xyCell = cell[xy2index(x,y,size)];

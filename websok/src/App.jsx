@@ -12,6 +12,9 @@ import { charLookup } from './soko/lookups.js';
 import TiledBoard from './components/TiledBoard.jsx';
 import PixelMap from './components/PixelMap.jsx';
 import Tile from './components/Tile.jsx';
+import { xy2index } from './soko/board.js';
+
+import './App.css';
 
 const initSize = 16;
 const initCell = new Array(initSize**2).fill(0).map((_,i) => i%7 ? 0 : 1);
@@ -23,12 +26,11 @@ const boardTimeInterval = (BigInt(timerInterval) << BigInt(32)) / BigInt(1000);
 const defaultBackgroundColor = 'black';
 
 const moveIcon = "oi:move";
-const moveRadioId = '=move';
 
 export default function App() {
     let [board, setBoard] = useState(new Board({size:initSize, cell:initCell, types:['_','bee'], grammar:initGrammarText}));
     let [hoverCell, setHoverCell] = useState({x:0,y:0});
-    let [tiledBoardState, setTiledBoardState] = useState({top:0,left:0,pixelsPerTile:32,tilesPerSide:8});
+    let [navState, setNavState] = useState({top:0,left:0,pixelsPerTile:32,tilesPerSide:8,mapPixelsPerCell:4});
     let [boardTime, setBoardTime] = useState(board.time);
     let [timer, setTimer] = useState(null);
     let [icons, setIcons] = useState({bee: {name: 'bee', color: 'orange'}});
@@ -78,11 +80,14 @@ export default function App() {
         setGrammarText(currentValue);
       };
 
+    const pause = () => {
+      clearTimeout(timer);
+      setTimer(null);
+    }
     const onPauseRestart = () => {
-      if (timer) {
-        clearTimeout(timer);
-        setTimer(null);
-      } else {
+      if (timer)
+        pause();
+      else {
         const timerFunc = () => {
           window.requestIdleCallback (() => {
             let queuedMoveList = [];
@@ -118,20 +123,39 @@ export default function App() {
       if (selectedType)
         paint({ x, y });
       else {
-        const offset = tiledBoardState.tilesPerSide >> 1;
-        setTiledBoardState ({ ...tiledBoardState, left: wrapCoord (x - offset), top: wrapCoord (y - offset) })
+        const offset = navState.tilesPerSide >> 1;
+        setNavState ({ ...navState, left: wrapCoord (x - offset), top: wrapCoord (y - offset) })
       }
     };
 
     const onDrag = (dx, dy) => {
       if (selectedType !== undefined) return;
-      setTiledBoardState ({...tiledBoardState, left: wrapCoord(tiledBoardState.left - Math.round(dx)), top: wrapCoord(tiledBoardState.top - Math.round(dy))});
+      setNavState ({...navState, left: wrapCoord(navState.left - Math.round(dx)), top: wrapCoord(navState.top - Math.round(dy))});
+    };
+
+    const onChangeBoardSize = (evt) => {
+      const newSize = parseInt(evt.target.value);
+      if (newSize < board.size) {
+        let nonempty = false;
+        for (let x = newSize; !nonempty && x < board.size; ++x)
+          for (let y = newSize; !nonempty && y < board.size; ++y)
+            if (board.getCell(x,y).type !== 0)
+              nonempty = true;
+        if (nonempty && !window.confirm('Shrink board and lose nonempty cells?'))
+          return;
+      }
+      let cell = new Array(newSize**2).fill(0);
+      for (let x = 0; x < Math.min(newSize,board.size); ++x)
+        for (let y = 0; y < Math.min(newSize,board.size); ++y)
+          cell[xy2index(x,y,newSize)] = boardJson.cell[xy2index(x,y,board.size)];
+      if (timer) pause();
+      setBoard(new Board({...boardJson, size:newSize, cell}));
+      setNavState({...navState,top:navState.top%newSize,left:navState.left%newSize,tilesPerSide:navState.tilesPerSide%newSize});
     };
 
 return (
 <>
-<div>Board</div>
-
+<div className="NavigationPanel" style={{height:Math.max(navState.mapPixelsPerCell*board.size,navState.tilesPerSide*navState.pixelsPerTile)+'px'}}>
 <TiledBoard
   size={boardJson.size}
   cell={boardJson.cell}
@@ -140,12 +164,11 @@ return (
   onPaint={tiledBoardPaint} 
   onHover={setHoverCell}
   onDrag={onDrag}
-  pixelsPerTile={tiledBoardState.pixelsPerTile} 
-  tilesPerSide={tiledBoardState.tilesPerSide} 
-  top={tiledBoardState.top}
-  left={tiledBoardState.left}
+  pixelsPerTile={navState.pixelsPerTile} 
+  tilesPerSide={navState.tilesPerSide} 
+  top={navState.top}
+  left={navState.left}
   background={background}/>
-  <span>{hoverCell ? board.getCellDescriptorString(hoverCell.x,hoverCell.y) : (<i>Hover over cell to see state</i>)}</span>
 <PixelMap 
   size={boardJson.size} 
   cell={boardJson.cell} 
@@ -153,9 +176,11 @@ return (
   icons={icons} 
   onPaint={pixelMapPaint} 
   onHover={setHoverCell}
-  pixelsPerCell={4} 
-  focusRect={{top:tiledBoardState.top,left:tiledBoardState.left,width:tiledBoardState.tilesPerSide,height:tiledBoardState.tilesPerSide}}
+  pixelsPerCell={navState.mapPixelsPerCell} 
+  focusRect={{top:navState.top,left:navState.left,width:navState.tilesPerSide,height:navState.tilesPerSide}}
   background={background}/>
+</div>
+  <span>{hoverCell ? board.getCellDescriptorString(hoverCell.x,hoverCell.y) : (<i>Hover over cell to see state</i>)}</span>
 <div>Time: {(Number(boardTime >> BigInt(22)) / 1024).toFixed(2)}s</div>
 <button onClick={onPauseRestart}>{timer ? "Pause" : "Start"}</button>
 <fieldset><table className="palette">
@@ -172,8 +197,8 @@ return (
     <td>{type==='_'?'':(<span className="paletteRotationCheckbox"><input type="checkbox" defaultChecked={!!icons[type].rotate} id={type+'-rotate'} onClick={(evt)=>updateIcon(type,'rotate',!icons[type].rotate)}/><label htmlFor={type+'-rotate'}>Rotate</label></span>)}</td>
   </tr>))}
   <tr>
-    <td><span><label><input type="radio" name="palette" id={moveRadioId} checked={typeof(selectedType)==='undefined'} onChange={(evt)=>{evt.target.checked && setSelectedType(undefined)}}/></label></span></td>
-    <td><label htmlFor={moveRadioId}><span className="paletteTypeIcon"><Icon icon={moveIcon}/></span></label></td>
+    <td><span><label><input type="radio" name="palette" id="=move" checked={typeof(selectedType)==='undefined'} onChange={(evt)=>{evt.target.checked && setSelectedType(undefined)}}/></label></span></td>
+    <td><label htmlFor="=move"><span className="paletteTypeIcon"><Icon icon={moveIcon}/></span></label></td>
     </tr>
   </tbody></table></fieldset>
 <div>{selectedType
@@ -183,6 +208,12 @@ return (
           : (<> paint {selectedType}/<DebounceInput element={Input} debounceTimeout={500} value={typePaintState[selectedType] || ''} placeholder={'@N, @S, @E, @W...'} onChange={(evt)=>setTypePaintState({...typePaintState,[selectedType]:evt.target.value})}/></>)}
           </span>)
       : (<span>Drag map to move</span>)}
+</div>
+<div>
+ <label htmlFor="=size">Board size:</label>
+ <select id="=size" onChange={onChangeBoardSize} value={board.size}>
+  {[8,16,32,64,128].map((size) => (<option key={`boardSize${size}`} value={size}>{size}</option>))}
+ </select>
 </div>
 <div>Grammar</div>
 <DebounceInput element={Textarea} debounceTimeout={500} cols={80} autoSize value={grammarText} onChange={onGrammarTextChange}/>

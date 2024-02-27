@@ -3,7 +3,7 @@ import { useBoardUtils, focusCssColor } from './boardUtils.js';
 import { fromString } from 'css-color-converter';
 import { xy2index } from '../soko/board.js';
 
-export default function TiledBoard(props) {
+export default function PixelMap(props) {
     let { size, pixelsPerCell, cell, types, icons, onPaint, onHover, background, focusRect, ...otherProps } = props;
     const { onMouseDown, onMouseUp, onMouseLeave, onMouseEnterCell } = useBoardUtils({onPaint,onHover});
 
@@ -51,5 +51,5 @@ export default function TiledBoard(props) {
     }
 
     pixelsPerCell = pixelsPerCell || 1;
-    return (<div><canvas ref={canvasRef} width={size} height={size} style={{width:size*pixelsPerCell,height:size*pixelsPerCell}} {...otherProps} onMouseDown={onMouseDown()} onMouseUp={onMouseUp} onMouseLeave={onMouseLeave} onMouseMove={onMouseMove}/></div>);
+    return (<div className="PixelMap"><canvas ref={canvasRef} width={size} height={size} style={{width:size*pixelsPerCell,height:size*pixelsPerCell}} {...otherProps} onMouseDown={onMouseDown()} onMouseUp={onMouseUp} onMouseLeave={onMouseLeave} onMouseMove={onMouseMove}/></div>);
 }

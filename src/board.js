@@ -10,9 +10,6 @@ const defaultRngSeed = 5489;
 
 const xy2index = (x, y, size) => (((y % size) + size) % size) * size + (((x % size) + size) % size);
 
-const bigIntMax = (...args) => args.reduce((m, e) => e > m ? e : m);
-const bigIntMin = (...args) => args.reduce((m, e) => e < m ? e : m);
-
 // Time-efficient data structure for storing a set of ints in the range [0,n) where n is a power of 2
 // Uses 2n memory.
 // Counting total number of elements is an O(1) operation
