@@ -1,6 +1,6 @@
 import { useState, useRef } from 'react';
 import Tile from './Tile.jsx';
-import { useBoardUtils } from './boardUtils.js';
+import { useBoardUtils, focusCssColor } from './boardUtils.js';
 import { xy2index } from '../soko/board.js';
 import './TiledBoard.css';
 
@@ -21,10 +21,11 @@ export default function TiledBoard(props) {
     };
     const { onMouseDown, onMouseUp, onMouseLeave, onMouseMove, onMouseEnterCell } = useBoardUtils({onPaint,onHover,onDrag:onDragWrap});
 
-    const xIndex = new Array(tilesPerSide).fill(0).map ((_, x) => (x + left) % size);
-    const yIndex = new Array(tilesPerSide).fill(0).map ((_, y) => (y + top) % size);
+    const xIndex = new Array(tilesPerSide+1).fill(0).map ((_, x) => (x + left) % size);
+    const yIndex = new Array(tilesPerSide+1).fill(0).map ((_, y) => (y + top) % size);
 
     const [fontSize, innerSize, outerSize, offset] = [1, tilesPerSide+1, tilesPerSide, -1/2].map ((s) => s * pixelsPerTile);
+    const focusColor = focusCssColor (icons);
 
 return (
 <>
@@ -37,7 +38,7 @@ return (
         const type = types[typeIndex];
         const state = typeof(xyCell) === 'number' ? '' : xyCell[1];
         const icon = icons[type];
-        return (<Tile key={'tiledBoardRow'+y+'Cell'+x} onMouseEnter={()=>onMouseEnterCell(x,y)} icon={icon} type={type} state={state}/>)
+        return (<Tile key={'tiledBoardRow'+y+'Cell'+x} onMouseEnter={()=>onMouseEnterCell(x,y)} icon={icon} type={type} state={state} focusColor={focusColor}/>)
     })}
     </div>))}
 </div>

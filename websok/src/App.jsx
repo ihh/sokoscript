@@ -7,6 +7,7 @@ import { Icon } from '@iconify/react';
 import { Board } from './soko/board.js';
 import { parseOrUndefined } from './soko/gramutil.js';
 import { hexMD5 } from './soko/md5.js';
+import { charLookup } from './soko/lookups.js';
 
 import TiledBoard from './components/TiledBoard.jsx';
 import PixelMap from './components/PixelMap.jsx';
@@ -33,6 +34,7 @@ export default function App() {
     let [icons, setIcons] = useState({bee: {name: 'bee', color: 'orange'}});
     let [moveCounter, setMoveCounter] = useState(0);  // hacky way to force updates without cloning Board object
     let [selectedType, setSelectedType] = useState(undefined);
+    let [typePaintState, setTypePaintState] = useState({});
     let [grammarText, setGrammarText] = useState(initGrammarText);
     let [errorMessage, setErrorMessage] = useState(undefined);
 
@@ -93,17 +95,34 @@ export default function App() {
       }
     };
 
-    const onPaint = ({ x, y }) => {
-      if (selectedType === undefined) return;
-      board.setCellTypeByName(x, y, selectedType);
-      setBoard(board);
-      setMoveCounter(moveCounter+1);
-    };
-
     const wrapCoord = (coord) => {
       while (coord < 0) coord += board.size;
       return coord % board.size;
     };
+
+    const paintState = (type) => (typePaintState[type] || '').replaceAll(/@([NSEW])/g, (_m,g) => charLookup.absDir[g]);
+
+    const paint = ({ x, y }) => {
+      board.setCellTypeByName(x, y, selectedType, paintState(selectedType));
+      setBoard(board);
+      setMoveCounter(moveCounter+1);
+    };
+    const tiledBoardPaint = ({ x, y }) => {
+      if (selectedType)
+        paint({ x, y });
+      else {
+        // TODO: select cell
+      }
+    };
+    const pixelMapPaint = ({ x, y }) => {
+      if (selectedType)
+        paint({ x, y });
+      else {
+        const offset = tiledBoardState.tilesPerSide >> 1;
+        setTiledBoardState ({ ...tiledBoardState, left: wrapCoord (x - offset), top: wrapCoord (y - offset) })
+      }
+    };
+
     const onDrag = (dx, dy) => {
       if (selectedType !== undefined) return;
       setTiledBoardState ({...tiledBoardState, left: wrapCoord(tiledBoardState.left - Math.round(dx)), top: wrapCoord(tiledBoardState.top - Math.round(dy))});
@@ -118,7 +137,7 @@ return (
   cell={boardJson.cell}
   types={types} 
   icons={icons} 
-  onPaint={onPaint} 
+  onPaint={tiledBoardPaint} 
   onHover={setHoverCell}
   onDrag={onDrag}
   pixelsPerTile={tiledBoardState.pixelsPerTile} 
@@ -132,7 +151,8 @@ return (
   cell={boardJson.cell} 
   types={types} 
   icons={icons} 
-  onPaint={onPaint} 
+  onPaint={pixelMapPaint} 
+  onHover={setHoverCell}
   pixelsPerCell={4} 
   focusRect={{top:tiledBoardState.top,left:tiledBoardState.left,width:tiledBoardState.tilesPerSide,height:tiledBoardState.tilesPerSide}}
   background={background}/>
@@ -144,7 +164,7 @@ return (
      ? ''
      : (<tr key={`typeCount-${type}`}>
     <td><span><label><input type="radio" name="palette" id={type} checked={selectedType===type} onChange={(evt)=>{evt.target.checked && setSelectedType(type)}}/></label></span></td>
-    <td><label htmlFor={type}><span className="paletteTypeIcon"><Tile type={type} value={type} icon={icons[type]}/></span></label></td>
+    <td><label htmlFor={type}><span className="paletteTypeIcon"><Tile type={type} state={paintState(type)} value={type} icon={icons[type]}/></span></label></td>
     <td><label htmlFor={type}><span className="paletteTypeName">{type==='_'?(<i>empty</i>):type}</span></label></td>
     <td><label htmlFor={type}><span className="paletteTypeCount">({typeCount[type]})</span></label></td>
     <td><DebounceInput element={Input} debounceTimeout={500} value={icons[type].color} placeholder={type==='_'?defaultBackgroundColor:icons[type].defaultColor} onChange={(evt)=>updateIcon(type,'color',evt.target.value)}/></td>
@@ -156,6 +176,14 @@ return (
     <td><label htmlFor={moveRadioId}><span className="paletteTypeIcon"><Icon icon={moveIcon}/></span></label></td>
     </tr>
   </tbody></table></fieldset>
+<div>{selectedType
+      ? (<span>Click on map to
+         {selectedType === '_'
+          ? ' erase'
+          : (<> paint {selectedType}/<DebounceInput element={Input} debounceTimeout={500} value={typePaintState[selectedType] || ''} placeholder={'@N, @S, @E, @W...'} onChange={(evt)=>setTypePaintState({...typePaintState,[selectedType]:evt.target.value})}/></>)}
+          </span>)
+      : (<span>Drag map to move</span>)}
+</div>
 <div>Grammar</div>
 <DebounceInput element={Textarea} debounceTimeout={500} cols={80} autoSize value={grammarText} onChange={onGrammarTextChange}/>
 <div>{errorMessage}</div>
