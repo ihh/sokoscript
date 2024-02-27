@@ -211,7 +211,7 @@ return (
       ? (<span>Click on map to
          {selectedType === '_'
           ? ' erase'
-          : (<> paint {selectedType}/<DebounceInput element={Input} debounceTimeout={500} value={typePaintState[selectedType] || ''} placeholder={'@N, @S, @E, @W...'} onChange={(evt)=>setTypePaintState({...typePaintState,[selectedType]:evt.target.value})}/>
+          : (<> place {selectedType}/<DebounceInput element={Input} debounceTimeout={500} value={typePaintState[selectedType] || ''} placeholder={'@N, @S, @E, @W...'} onChange={(evt)=>setTypePaintState({...typePaintState,[selectedType]:evt.target.value})}/>
           <select id="=id" value={paintId} onChange={(evt)=>setPaintId(evt.target.value)}>
             <option value="anon">as anonymous cell</option>
             <option value="player">as player</option>
