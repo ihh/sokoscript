@@ -5,7 +5,7 @@ import { xy2index } from '../soko/board.js';
 import './TiledBoard.css';
 
 export default function TiledBoard(props) {
-    const { size, cell, types, icons, onPaint, onDrag, onHover, pixelsPerTile, tilesPerSide, top, left, hoverCell, cursor, background } = props;
+    const { size, cell, types, icons, onPaint, onDrag, onHover, pixelsPerTile, tilesPerSide, top, left, hoverCell, selectedType, background } = props;
 
     const onDragWrap = useCallback ((x, y, stateAtMouseDown) => {
         x = x / pixelsPerTile + left - stateAtMouseDown.left;
@@ -13,7 +13,8 @@ export default function TiledBoard(props) {
         if (onDrag)
             onDrag(x,y);
     }, [pixelsPerTile, left, top, onDrag]);
-    const { onMouseDown, onMouseUp, onMouseLeave, onMouseMove, onMouseEnterCell } = useBoardUtils({onPaint,onHover,onDrag:onDragWrap});
+    const { onMouseDown, onMouseUp, onMouseLeave, onMouseMove, onMouseEnterCell, mouseDown } = useBoardUtils ({ onPaint, onHover, onDrag: onDragWrap });
+    const cursor = typeof(selectedType)==='undefined' ? (mouseDown ? 'grabbing' : 'grab') : 'pointer';
 
     const xIndex = new Array(tilesPerSide+1).fill(0).map ((_, x) => (x + left) % size);
     const yIndex = new Array(tilesPerSide+1).fill(0).map ((_, y) => (y + top) % size);

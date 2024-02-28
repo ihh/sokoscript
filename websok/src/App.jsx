@@ -3,6 +3,7 @@ import Textarea from 'rc-textarea';
 import Input from 'rc-input';
 import DebounceInput from 'react-debounce-input';
 import { Icon } from '@iconify/react';
+import natsort from 'natsort';
 
 import { Board } from './soko/board.js';
 import { parseOrUndefined } from './soko/gramutil.js';
@@ -137,14 +138,17 @@ export default function App() {
       }
     }, [selectedType, paint]);
 
+    const centerMap = useCallback (({ x, y }) => {
+      const offset = navState.tilesPerSide >> 1;
+      setNavState ({ ...navState, left: wrapCoord (x - offset), top: wrapCoord (y - offset) })
+    }, [navState, wrapCoord]);
+
     const pixelMapPaint = useCallback (({ x, y }) => {
       if (selectedType)
         paint({ x, y });
-      else {
-        const offset = navState.tilesPerSide >> 1;
-        setNavState ({ ...navState, left: wrapCoord (x - offset), top: wrapCoord (y - offset) })
-      }
-    }, [navState, wrapCoord, selectedType, paint]);
+      else
+        centerMap ({ x, y });
+    }, [selectedType, paint, centerMap]);
 
     const onDrag = useCallback ((dx, dy) => {
       if (selectedType !== undefined) return;
@@ -152,7 +156,8 @@ export default function App() {
     }, [navState, wrapCoord, selectedType]);
 
     const mapPixelsPerCell = Math.max (1, Math.floor (navState.pixelsPerTile * navState.tilesPerSide / board.size));
-    const cursor = typeof(selectedType) === 'undefined' ? 'grab' : 'crosshair';
+
+    const ids = Object.keys(board.byID).sort(natsort());
 
 return (
 <>
@@ -171,7 +176,7 @@ return (
   top={navState.top}
   left={navState.left}
   hoverCell={hoverCell}
-  cursor={cursor}
+  selectedType={selectedType}
   background={background}/>
 <PixelMap 
   board={board}
@@ -181,12 +186,12 @@ return (
   icons={icons} 
   onPaint={pixelMapPaint} 
   onHover={setHoverCell}
-  cursor={cursor}
+  selectedType={selectedType}
   pixelsPerCell={mapPixelsPerCell} 
   focusRect={{top:navState.top,left:navState.left,width:navState.tilesPerSide+2,height:navState.tilesPerSide+2}}
   background={background}/>
 </div>
-  <span>{hoverCell ? (`(${hoverCell.x},${hoverCell.y}) ` + board.getCellDescriptorString(hoverCell.x,hoverCell.y)) : (<i>Hover over cell to see state</i>)}</span>
+  <span>{hoverCell ? board.getCellDescriptorStringWithCoords(hoverCell.x,hoverCell.y) : (<i>Hover over cell to see state</i>)}</span>
 <div>Time: {(Number(board.time >> BigInt(22)) / 1024).toFixed(2)}s</div>
 <button onClick={onPauseRestart}>{timers.boardTimer ? "Pause" : "Start"}</button>
 <fieldset><table className="palette">
@@ -220,6 +225,11 @@ return (
           </span>)
       : (<span>Drag map to move</span>)}
 </div>
+{ids.length===0 ? '' : (<div className="trackedIds">
+Tracked cells: {ids.map((id,n)=>{
+  const [x,y] = board.index2xy(board.byID[id]);
+  return (<button key={'=tracked-'+id} onClick={()=>centerMap({x,y})}>{id}</button>);
+})}</div>)}
 <BoardSizeSelector board={board} setBoard={setBoard} navState={navState} setNavState={setNavState} pause={pause}/>
 <div>Grammar</div>
 <DebounceInput element={Textarea} debounceTimeout={500} cols={80} autoSize value={grammarText} onChange={onGrammarTextChange}/>

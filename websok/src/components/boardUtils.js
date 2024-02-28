@@ -31,7 +31,7 @@ const useBoardUtils = (opts) => {
         onHover && onHover({x, y});
     }, [onPaint, onHover, mouseState]);
 
-    return { onMouseDown, onMouseUp, onMouseMove, onMouseLeave, onMouseEnterCell };
+    return { onMouseDown, onMouseUp, onMouseMove, onMouseLeave, onMouseEnterCell, mouseDown: mouseState.mouseDown };
 }
 
 const focusCssColor = (icons, alpha) => {

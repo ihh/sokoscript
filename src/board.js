@@ -162,6 +162,10 @@ class Board {
         return type + (cell.state ? `/${cell.state}` : '') + (cell.meta && Object.keys(cell.meta).length ? ` ${JSON.stringify(cell.meta)}` : '');
     }
 
+    getCellDescriptorStringWithCoords (x, y) {
+        return `(${x},${y}) ` + this.getCellDescriptorString(x,y);
+    }
+
     totalTypeRates() {
         return this.byType.map ((counter, type) => BigInt(counter.total()) * this.grammar.rateByType[type]);
     }

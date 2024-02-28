@@ -4,8 +4,9 @@ import { fromString } from 'css-color-converter';
 import { xy2index } from '../soko/board.js';
 
 export default function PixelMap(props) {
-    let { size, pixelsPerCell, cell, types, icons, onPaint, onHover, background, focusRect, cursor, ...otherProps } = props;
-    const { onMouseDown, onMouseUp, onMouseLeave, onMouseEnterCell } = useBoardUtils({onPaint,onHover});
+    let { size, pixelsPerCell, cell, types, icons, onPaint, onHover, background, focusRect, selectedType, ...otherProps } = props;
+    const { onMouseDown, onMouseUp, onMouseLeave, onMouseEnterCell } = useBoardUtils({ onPaint, onHover });
+    const cursor = typeof(selectedType) === 'undefined' ? 'move' : 'pointer';
 
     const canvasRef = useRef(null);    
 
