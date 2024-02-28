@@ -51,5 +51,6 @@ export default function PixelMap(props) {
     }, [pixelsPerCell, onMouseEnterCell]);
 
     pixelsPerCell = pixelsPerCell || 1;
-    return (<div className="PixelMap" style={{cursor}}><canvas ref={canvasRef} width={size} height={size} style={{width:size*pixelsPerCell,height:size*pixelsPerCell}} {...otherProps} onMouseDown={onMouseDown()} onMouseUp={onMouseUp} onMouseLeave={onMouseLeave} onMouseMove={onMouseMove}/></div>);
+    const cssSize = size * pixelsPerCell;
+    return (<div className="PixelMap" style={{cursor}}><canvas ref={canvasRef} width={size} height={size} style={{width:cssSize,height:cssSize}} {...otherProps} onMouseDown={onMouseDown()} onMouseUp={onMouseUp} onMouseLeave={onMouseLeave} onMouseMove={onMouseMove}/></div>);
 }

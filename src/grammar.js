@@ -141,7 +141,7 @@ function peg$parse(input, options) {
       peg$startRuleFunctions = { RuleTop: peg$parseRuleTop },
       peg$startRuleFunction  = peg$parseRuleTop,
 
-      peg$c0 = function(rs) { return rs },
+      peg$c0 = function(s) { return s },
       peg$c1 = ".",
       peg$c2 = peg$literalExpectation(".", false),
       peg$c3 = function(r, s) { return validateInheritance(r,s,error) },
