@@ -41,6 +41,8 @@ export default function App() {
     let [paintId, setPaintId] = useState(undefined);
     let [grammarText, setGrammarText] = useState(initGrammarText);
     let [errorMessage, setErrorMessage] = useState(undefined);
+    let [importFile, setImportFile] = useState();
+
 
     const { types } = board.typesIncludingUnknowns();
     const typeCount = board.typeCountsIncludingUnknowns();
@@ -234,6 +236,30 @@ Tracked cells: {ids.map((id,n)=>{
 <div>Grammar</div>
 <DebounceInput element={Textarea} debounceTimeout={500} cols={80} autoSize value={grammarText} onChange={onGrammarTextChange}/>
 <div>{errorMessage}</div>
+<button onClick={()=>{
+  const json = {boardJson,icons,typePaintState,selectedType,paintId,navState};
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob([JSON.stringify(json)],{type:'application/json'}));
+  a.download = 'board.json';
+  a.click();
+}}>Export</button>
+<input type="file" onChange={(evt)=>setImportFile(evt.target.files[0])}/>
+{importFile ? (<button onClick={()=>{
+  const reader = new FileReader();
+  reader.onload = (evt) => {
+    const json = JSON.parse(evt.target.result);
+    const {boardJson,icons,typePaintState,selectedType,paintId,navState} = json;
+    board = new Board(boardJson);
+    setBoard(board);
+    setIcons(icons);
+    setTypePaintState(typePaintState);
+    setSelectedType(selectedType);
+    setPaintId(paintId);
+    setNavState(navState);
+    setImportFile(undefined);
+  };
+  reader.readAsText(importFile);
+}}>Import</button>) : ''}
 </>
 );
 }
