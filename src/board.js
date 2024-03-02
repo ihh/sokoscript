@@ -251,10 +251,11 @@ class Board {
             const { time, user, id, dir, command, key } = move;
             const index = this.byID[id];
             if (typeof(index) !== 'undefined') {
-                const [x,y] = this.index2xy[index];
+                const [x,y] = this.index2xy(index);
+                const cell = this.cell[index];
                 if (typeof(cell.owner) === 'undefined' || user === cell.owner || user === Board.owner) {
                     const rules = command ? this.grammar.command[cell.type][command] : this.grammar.key[cell.type][key];
-                    rules.reduce ((rule) => success || applyTransformRule (this, x, y, dir, rule), false);
+                    rules.reduce ((success, rule) => success || applyTransformRule (this, x, y, dir, rule), false);
                 }
             }
         } else if (move.type === 'write') {

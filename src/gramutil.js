@@ -159,7 +159,7 @@ const compileTypes = (rules) => {
     transform.forEach ((rules) =>
         rules.forEach ((rule) => {
             rule.rate_Hz = BigInt (Math.ceil (rule.rate / million));
-            rule.acceptProb_leftShift30 = Number (BigInt(rule.rate) * big2pow30minus1 / (rule.rate_Hz * bigMillion));
+            rule.acceptProb_leftShift30 = rule.rate && Number (BigInt(rule.rate) * big2pow30minus1 / (rule.rate_Hz * bigMillion));
         }))
 
     let command = types.map(()=>({})), key = types.map(()=>({}));

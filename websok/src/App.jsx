@@ -24,6 +24,9 @@ const initGrammarText = 'bee _ : $2 $1.\n';
 
 const timerInterval = 20;  // ms
 const boardTimeInterval = (BigInt(timerInterval) << BigInt(32)) / BigInt(1000);
+const nextMoveTime = (board) => board.time + boardTimeInterval;
+
+const playerId = 'Player';
 
 const defaultBackgroundColor = 'black';
 
@@ -31,6 +34,7 @@ const moveIcon = "oi:move";
 
 export default function App() {
     let [board, setBoard] = useState(new Board({size:initSize, cell:initCell, types:['_','bee'], grammar:initGrammarText}));
+    let [moveQueue] = useState({moves:[]});
     let [hoverCell, setHoverCell] = useState(undefined);
     let [navState, setNavState] = useState({top:0,left:0,pixelsPerTile:32,tilesPerSide:8});
     let [timers] = useState({boardTimer:null});
@@ -105,8 +109,8 @@ export default function App() {
       forceUpdate();
     }, [stopTimer, startTimer, forceUpdate]);
     timers.timerFunc = useCallback (() => {
-      let queuedMoveList = [];
-      board.evolveAndProcess (board.time + boardTimeInterval, queuedMoveList, false);
+      board.evolveAndProcess (nextMoveTime(board), moveQueue.moves, false);
+      moveQueue.moves = [];
       startTimer();
       forceUpdate();
     }, [board, startTimer, forceUpdate]);
@@ -124,7 +128,7 @@ export default function App() {
       let meta;
       if (selectedType !== '_') {
         if (paintId === 'player')
-          meta = { id: 'Player' };  // uppercase avoids collision with any type named 'player'
+          meta = { id: playerId };  // uppercase avoids collision with any type named 'player'
         else if (paintId === 'unique')
           meta = { id: board.getUniqueID(selectedType) };
       }
@@ -161,6 +165,9 @@ export default function App() {
 
     const ids = Object.keys(board.byID).sort(natsort());
 
+    const playerCell = playerId in board.byID && board.cell[board.byID[playerId]];
+    const playerRules = playerCell && board.grammar.transform[playerCell.type].filter((rule) => rule.command || rule.key);
+
 return (
 <>
 <div className="NavigationPanel">
@@ -193,6 +200,14 @@ return (
   focusRect={{top:navState.top,left:navState.left,width:navState.tilesPerSide+2,height:navState.tilesPerSide+2}}
   background={background}/>
 </div>
+<div className="PlayerControls">
+  {playerCell && (<span>Player actions: </span>)}
+  {playerRules && playerRules.map((rule,n)=>(<button key={`command-${n}`}
+ onClick={()=>{moveQueue.moves.push({type:'command',time:nextMoveTime(board)+1n,id:playerId,dir:'N',command:rule.command,key:rule.key});forceUpdate();}}
+>{rule.command || rule.key}</button>))}
+  <span className="MoveQueue">
+    {moveQueue.moves.map((move,n)=>(<span key={`move-${n}`}> {move.command || move.key}</span>))}
+  </span></div>
   <span>{hoverCell ? board.getCellDescriptorStringWithCoords(hoverCell.x,hoverCell.y) : (<i>Hover over cell to see state</i>)}</span>
 <div>Time: {(Number(board.time >> BigInt(22)) / 1024).toFixed(2)}s</div>
 <button onClick={onPauseRestart}>{timers.boardTimer ? "Pause" : "Start"}</button>

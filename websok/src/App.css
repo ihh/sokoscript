@@ -3,3 +3,7 @@
     flex-direction: row;
     justify-content: space-between;
 }
+
+.PlayerControls {
+    min-height: 1.5em;
+}
