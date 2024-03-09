@@ -191,8 +191,9 @@ const stripDuplicateMetadata = (matcher, domCell, subCell, domTerm, subTerm) => 
     delete subCell.meta;
 }
 
+const matchLhs = (board, x, y, dir, rule) => rule.lhs.reduce ((matcher, term, pos) => matcher.matchLhsCell(term,pos), new Matcher (board, x, y, dir) );
 const transformRuleUpdate = (board, x, y, dir, rule) => {
-  const matcher = rule.lhs.reduce ((matcher, term, pos) => matcher.matchLhsCell(term,pos), new Matcher (board, x, y, dir) );
+  const matcher = matchLhs (board, x, y, dir, rule);
   if (matcher.failed) return null;
   let update = rule.rhs.map ((term, pos) => matcher.newCellUpdate(term,pos,rule.score));
   for (let i = 0; i < update.length-1; ++i)
@@ -201,4 +202,4 @@ const transformRuleUpdate = (board, x, y, dir, rule) => {
   return update;
 }
 
-export { applyTransformRule, transformRuleUpdate };
+export { applyTransformRule, transformRuleUpdate, matchLhs };

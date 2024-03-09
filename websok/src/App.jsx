@@ -7,6 +7,7 @@ import natsort from 'natsort';
 import csscolors from 'css-color-names';
 
 import { Board } from './soko/board.js';
+import { matchLhs } from './soko/engine.js';
 import { parseOrUndefined } from './soko/gramutil.js';
 import { hexMD5 } from './soko/md5.js';
 import { charLookup, dirs } from './soko/lookups.js';
@@ -123,8 +124,8 @@ export default function App() {
     
     const onPauseRestart = timers.boardTimer ? pause : resume;
 
-    const makeMove = useCallback ((rule) => {
-      moveQueue.moves.push({type:'command',time:nextMoveTime(board)+1n,id:playerId,dir:dirs[Math.floor(Math.random()*dirs.length)],command:rule.command,key:rule.key});
+    const makeMove = useCallback ((rule, dir) => {
+      moveQueue.moves.push({type:'command',time:nextMoveTime(board)+1n,id:playerId,dir,command:rule.command,key:rule.key});
       forceUpdate();
     }, [moveQueue, board, forceUpdate]);
 
@@ -182,16 +183,43 @@ export default function App() {
     const ids = Object.keys(board.byID).sort(natsort());
 
     const playerCell = playerId in board.byID && board.cell[board.byID[playerId]];
-    const playerRules = playerCell && board.grammar.transform[playerCell.type].filter((rule) => rule.command || rule.key);
+    const playerRules = playerCell && board.grammar.transform[playerCell.type];
+    let playerKeyDirs = {}, playerCommandDirs = {}, playerCommandKey = {};
+    if (playerRules) {
+      const [x,y] = board.index2xy(board.byID[playerId]);
+      playerRules.forEach((rule) => {
+        dirs.forEach ((dir) => {
+          if (!matchLhs(board,x,y,dir,rule).failed) {
+            if (rule.key)
+              playerKeyDirs[rule.key] = (playerKeyDirs[rule.key] || []).concat ([dir]);
+            if (rule.command) {
+              playerCommandDirs[rule.command] = (playerCommandDirs[rule.command] || []).concat ([dir]);
+              if (rule.key && !(rule.command in playerCommandKey))
+                playerCommandKey[rule.command] = rule.key;
+            }
+          }
+        })
+      });
+    }
+    const playerCommands = Object.keys(playerCommandDirs);
 
     const makeMoveForKey = useCallback ((evt) => {
+      const key = evt.key;
       const targetTag = evt.target.tagName.toUpperCase();
-      if (targetTag !== 'INPUT' && targetTag !== 'TEXTAREA') {
-        const rules = playerRules && playerRules.filter ((rule) => rule.key === evt.key);
-        if (rules?.length)
-          makeMove(rules[0]);
+      const ruleDirs = playerKeyDirs[key];
+      if (targetTag !== 'INPUT' && targetTag !== 'TEXTAREA' && ruleDirs) {
+        const dir = ruleDirs[Math.floor(Math.random()*ruleDirs.length)];
+        makeMove({key}, dir);
       }
-    }, [makeMove, playerRules]);
+    }, [makeMove, playerKeyDirs]);
+
+    const makeMoveForCommand = useCallback ((command) => {
+      const ruleDirs = playerCommandDirs[command];
+      if (ruleDirs) {
+        const dir = ruleDirs[Math.floor(Math.random()*ruleDirs.length)];
+        makeMove({command}, dir);
+      }
+    }, [makeMove, playerCommandDirs]);
 
 return (
 <div className="App" onKeyDown={makeMoveForKey} tabIndex="0">
@@ -229,9 +257,9 @@ return (
 <div>{playerCell && <span>Player score: {playerCell.meta?.score}</span>}</div>
 <div className="PlayerControls">
   {playerCell && (<span>Player actions: </span>)}
-  {playerRules && playerRules.map((rule,n)=>(<button key={`command-${n}`}
- onClick={()=>makeMove(rule)}
->{rule.command || ''}<em>{rule.key?` (${rule.key})`:''}</em></button>))}
+  {playerRules && playerCommands.map((command,n)=>(<button key={`command-${n}`}
+ onClick={()=>makeMoveForCommand(command)}
+>{command}{playerCommandKey[command] ? (<em> ({playerCommandKey[command]})</em>) : ''}</button>))}
   <span className="MoveQueue">
     {moveQueue.moves.map((move,n)=>(<span key={`move-${n}`}> {move.command || move.key}</span>))}
   </span></div>
