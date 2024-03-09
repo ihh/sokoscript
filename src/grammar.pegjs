@@ -17,9 +17,13 @@
       if (term.id > lhsLen)
         return false;
       pos = term.id;
-    } else if ('group' in term)
-      pos = term.group;
-    if (pos) {
+    } else if ('group' in term) {
+      if (term.group > lhsLen)
+        return false;
+      if (!seen[term.group])
+        pos = term.group;
+    }
+    if (seen && pos) {
       if (seen[pos])
         return false;
       seen[pos] = true;
@@ -37,7 +41,7 @@
   const validateLhs = (lhs) => lhs.reduce ((memo, term) => ({ result: memo.result && reduceAlt (term, (term) => validateState(term,memo.matchedStateChars,true) && validateAddr(term,memo.matchedStateChars)),
                                                               matchedStateChars: memo.matchedStateChars.concat ([matchedStateChars(term)]) }),
                                                             { result: true, matchedStateChars: [] }).result;
-  const validateRhs = (lhs, rhs) => rhs.reduce ((result, term) => result && reduceAlt (term, (term) => validateState(term,lhs.map(matchedStateChars),false)), true) && validateIds(rhs,lhs.length);
+  const validateRhs = (lhs, rhs) => rhs.length <= lhs.length && rhs.reduce ((result, term) => result && reduceAlt (term, (term) => validateState(term,lhs.map(matchedStateChars),false)), true) && validateIds(rhs,lhs.length);
 
   const validateInheritance = (rule, rules, error) => {
     if (rule.type === 'transform')
@@ -117,13 +121,13 @@ InheritRhs
  = first:Prefix rest:(_ "," _ Prefix)+ { return [first].concat (rest.map ((r) => r[3])) }
  / p:Prefix { return [p] }
 
-Attribute = Rate / Sync / Command / Key / Reward / Sound / Caption
+Attribute = Rate / Sync / Command / Key / Score / Sound / Caption
 
 Lhs
- = t:Subject _ addr:DirOrNbrAddr _ u:LhsTerm s:LhsNbrSeq { return [t, { addr, ...u }].concat(s) }
- / t:Subject _ addr:DirOrNbrAddr _ u:LhsTerm { return [t, { addr, ...u }] }
- / t:Subject _sep u:LhsTerm s:LhsNbrSeq { return [t, u].concat(s) }
- / t:Subject _sep u:LhsTerm { return [t, u] }
+ = t:Subject _ addr:DirOrNbrAddr _ u:WildLhsTerm s:LhsNbrSeq { return [t, { addr, ...u }].concat(s) }
+ / t:Subject _ addr:DirOrNbrAddr _ u:WildLhsTerm { return [t, { addr, ...u }] }
+ / t:Subject _sep u:WildLhsTerm s:LhsNbrSeq { return [t, u].concat(s) }
+ / t:Subject _sep u:WildLhsTerm { return [t, u] }
  / t:Subject { return [t] }
 
 DirOrNbrAddr
@@ -288,9 +292,9 @@ Key
  = "key={" key:EscapedChar "}" { return { key } }
  / "key=" key:AttrChar { return { key } }
 
-Reward
- = "reward={" _ r:SignedInteger _ "}" { return { reward: parseInt(r) } }
- / "reward=" r:SignedInteger { return { reward: parseInt(r) } }
+Score
+ = "score={" _ r:SignedInteger _ "}" { return { score: parseInt(r) } }
+ / "score=" r:SignedInteger { return { score: parseInt(r) } }
 
 Sound
  = "sound={" sound:EscapedString "}" { return { sound } }
@@ -302,7 +306,7 @@ Caption
 
 
 NonZeroInteger
-  = n:[1-9][0-9]* { return parseInt(n) }
+  = [1-9][0-9]* { return parseInt(text()) }
 
 PositiveInteger
   = "+" NonZeroInteger

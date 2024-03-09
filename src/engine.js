@@ -16,6 +16,8 @@ class Matcher {
     getCell (x, y) { return board.getCell (x + this.x, y + this.y); }
 
     matchLhsTerm (t, type, state) {
+        if (t.op === 'any')
+            return true;
         if (t.op === 'negterm')
             return !this.matchLhsTerm (t.term, type, state);
         if (t.op === 'alt')
@@ -133,33 +135,43 @@ class Matcher {
         return this;
     }
 
-    newCell (t) {
-        if (t.op === 'group') {
-            let { type, state, meta } = this.termCell[t.group-1];
-            if (t.id)
-              meta = this.termCell[t.id-1].meta;
-            else if (t.id === 0)
-              meta = undefined;
+    getLhsPosForRhsTerm (t) {
+      if (t.id)
+        return t.id;
+      if (t.op === 'group' || t.op === 'prefix')
+        return t.group;
+      return undefined;
+    }
+
+    getMetaForRhsTerm (t, score) {
+      const g = this.getLhsPosForRhsTerm (t);
+      if (g) {
+        const meta = this.termCell[g-1].meta;
+        if (meta || score)
+          return { ...(meta||{}), ...(g===1 && score ? { score: (meta?.score || 0) + score } : {}) };
+      }
+      return undefined;
+    }
+
+    newCell (t, score) {
+      const meta = this.getMetaForRhsTerm (t, score);
+      if (t.op === 'group') {
+            const { type, state } = this.termCell[t.group-1];
             return { type, state, meta }
         }
         if (t.op === 'prefix') {
-            let { type, meta } = this.termCell[t.group-1];
+            const { type } = this.termCell[t.group-1];
             const state = t.state ? t.state.map(this.computeStateChar.bind(this)).join('') : '';
-            if (t.id)
-              meta = this.termCell[t.id-1].meta;
-            else if (t.id === 0)
-              meta = undefined;
             return { type, state, meta }
         }
         const { type } = t;
         const state = t.state ? t.state.map(this.computeStateChar.bind(this)).join('') : '';
-        const meta = t.id ? this.termCell[t.id-1].meta : undefined;
         return { type: t.type, state, meta };
     }
     
-    newCellUpdate (term,pos) {
+    newCellUpdate (term, pos, score) {
       const a = this.termAddr[pos];
-      return [a[0] + this.x, a[1] + this.y, this.newCell(term)];
+      return [a[0] + this.x, a[1] + this.y, this.newCell (term, score)];
     }
 };
 
@@ -170,21 +182,22 @@ const applyTransformRule = (board, x, y, dir, rule) => {
   return !!updates;
 }
 
-const stripDuplicateMetadata = (domCell, subCell) => {
-  if (domCell.meta && subCell.meta) {
-    ['id','owner'].forEach ((prop) => domCell.meta[prop] === subCell.meta[prop] && delete subCell.meta[prop])
-    if (!Object.keys(subCell.meta).length)
-      delete subCell.meta;
-  }
+const stripDuplicateMetadata = (matcher, domCell, subCell, domTerm, subTerm) => {
+  if (matcher.getLhsPosForRhsTerm(domTerm) === matcher.getLhsPosForRhsTerm(subTerm))
+    delete subCell.meta;
+  if (subCell?.meta?.id && domCell?.meta?.id === subCell?.meta?.id)
+    delete subCell.meta['id'];
+  if (subCell.meta && !Object.keys(subCell.meta).length)
+    delete subCell.meta;
 }
 
 const transformRuleUpdate = (board, x, y, dir, rule) => {
   const matcher = rule.lhs.reduce ((matcher, term, pos) => matcher.matchLhsCell(term,pos), new Matcher (board, x, y, dir) );
   if (matcher.failed) return null;
-  let update = rule.rhs.map ((term, pos) => matcher.newCellUpdate(term,pos));
+  let update = rule.rhs.map ((term, pos) => matcher.newCellUpdate(term,pos,rule.score));
   for (let i = 0; i < update.length-1; ++i)
     for (let j = i + 1; j < update.length; ++j)
-      stripDuplicateMetadata (update[i][2], update[j][2]);
+      stripDuplicateMetadata (matcher, update[i][2], update[j][2], rule.rhs[i], rule.rhs[j]);
   return update;
 }
 

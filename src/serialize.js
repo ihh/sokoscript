@@ -159,7 +159,7 @@ const serialize = (rules) => {
     + (rule.sync ? (' sync=' + fixedPoint6(rule.sync)) : '')
     + (rule.command ? (' command={' + escapeAttr(rule.command) + '}') : '')
     + (rule.key ? (' key={' + escapeAttr(rule.key) + '}') : '')
-    + (rule.reward ? (' reward=' + rule.reward) : '')
+    + (rule.score ? (' score=' + rule.score) : '')
     + (rule.sound ? (' sound={' + escapeAttr(rule.sound) + '}') : '')
     + (rule.caption ? (' caption={' + escapeAttr(rule.caption) + '}') : '');
   return rules.map ((rule) => {

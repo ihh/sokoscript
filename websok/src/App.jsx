@@ -225,6 +225,8 @@ return (
   focusRect={{top:navState.top,left:navState.left,width:navState.tilesPerSide+2,height:navState.tilesPerSide+2}}
   background={background}/>
 </div>
+<span>{hoverCell ? board.getCellDescriptorStringWithCoords(hoverCell.x,hoverCell.y) : (<i>Hover over cell to see state</i>)}</span>
+<div>{playerCell && <span>Player score: {playerCell.meta?.score}</span>}</div>
 <div className="PlayerControls">
   {playerCell && (<span>Player actions: </span>)}
   {playerRules && playerRules.map((rule,n)=>(<button key={`command-${n}`}
@@ -233,7 +235,6 @@ return (
   <span className="MoveQueue">
     {moveQueue.moves.map((move,n)=>(<span key={`move-${n}`}> {move.command || move.key}</span>))}
   </span></div>
-  <span>{hoverCell ? board.getCellDescriptorStringWithCoords(hoverCell.x,hoverCell.y) : (<i>Hover over cell to see state</i>)}</span>
 <div>Time: {(Number(board.time >> BigInt(22)) / 1024).toFixed(2)}s</div>
 <button onClick={onPauseRestart}>{timers.boardTimer ? "Pause" : "Start"}</button>
 <fieldset><table className="palette">
