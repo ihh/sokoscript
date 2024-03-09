@@ -10,7 +10,6 @@ import { Board } from './soko/board.js';
 import { parseOrUndefined } from './soko/gramutil.js';
 import { hexMD5 } from './soko/md5.js';
 import { charLookup, dirs } from './soko/lookups.js';
-import { xy2index } from './soko/board.js';
 
 import TiledBoard from './components/TiledBoard.jsx';
 import PixelMap from './components/PixelMap.jsx';
