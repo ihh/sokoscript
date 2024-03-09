@@ -41,6 +41,7 @@ export default function App() {
     let [icons, setIcons] = useState({bee: {name: 'bee', color: 'orange'}});
     let [moveCounter, setMoveCounter] = useState(0);  // hacky way to force updates without cloning Board object
     let [selectedType, setSelectedType] = useState(undefined);
+    let [trackedId, setTrackedId] = useState(undefined);
     let [typePaintState, setTypePaintState] = useState({});
     let [paintId, setPaintId] = useState(undefined);
     let [grammarText, setGrammarText] = useState(initGrammarText);
@@ -111,9 +112,15 @@ export default function App() {
     timers.timerFunc = useCallback (() => {
       board.evolveAndProcess (nextMoveTime(board), moveQueue.moves, false);
       moveQueue.moves = [];
+      if (trackedId) {
+        if (trackedId in board.byID)
+          centerId(trackedId);
+        else
+          setTrackedId(undefined);
+      }
       startTimer();
       forceUpdate();
-    }, [board, startTimer, forceUpdate]);
+    }, [board, startTimer, forceUpdate, trackedId]);
     
     const onPauseRestart = timers.boardTimer ? pause : resume;
 
@@ -148,6 +155,10 @@ export default function App() {
       const offset = navState.tilesPerSide >> 1;
       setNavState ({ ...navState, left: wrapCoord (x - offset), top: wrapCoord (y - offset) })
     }, [navState, wrapCoord]);
+    const centerId = useCallback ((id) => {
+      const [x, y] = board.index2xy(board.byID[id]);
+      centerMap ({ x, y });
+    }, [board, centerMap]);
 
     const pixelMapPaint = useCallback (({ x, y }) => {
       if (selectedType)
@@ -159,6 +170,7 @@ export default function App() {
     const onDrag = useCallback ((dx, dy) => {
       if (selectedType !== undefined) return;
       setNavState ({...navState, left: wrapCoord(navState.left - Math.round(dx)), top: wrapCoord(navState.top - Math.round(dy))});
+      setTrackedId (undefined);
     }, [navState, wrapCoord, selectedType]);
 
     const mapPixelsPerCell = Math.max (1, Math.floor (navState.pixelsPerTile * navState.tilesPerSide / board.size));
@@ -243,16 +255,15 @@ return (
       : (<span>Drag map to move</span>)}
 </div>
 {ids.length===0 ? '' : (<div className="trackedIds">
-Tracked cells: {ids.map((id,n)=>{
-  const [x,y] = board.index2xy(board.byID[id]);
-  return (<button key={'=tracked-'+id} onClick={()=>centerMap({x,y})}>{id}</button>);
+Tracked cells: {ids.map((id)=>{
+  return (<button key={'=tracked-'+id} className={id===trackedId?'SelectedId':'UnselectedId'} onClick={()=>{centerId(id);setTrackedId(id===trackedId?undefined:id)}}>{id}</button>);
 })}</div>)}
 <BoardSizeSelector board={board} setBoard={setBoard} navState={navState} setNavState={setNavState} pause={pause}/>
 <div>Grammar</div>
 <DebounceInput element={Textarea} debounceTimeout={500} cols={80} autoSize value={grammarText} onChange={onGrammarTextChange}/>
 <div>{errorMessage}</div>
 <button onClick={()=>{
-  const json = {boardJson,icons,typePaintState,selectedType,paintId,navState};
+  const json = {boardJson,icons,typePaintState,selectedType,trackedId,paintId,navState};
   const a = document.createElement('a');
   a.href = URL.createObjectURL(new Blob([JSON.stringify(json)],{type:'application/json'}));
   a.download = 'board.json';
@@ -263,12 +274,13 @@ Tracked cells: {ids.map((id,n)=>{
   const reader = new FileReader();
   reader.onload = (evt) => {
     const json = JSON.parse(evt.target.result);
-    const {boardJson,icons,typePaintState,selectedType,paintId,navState} = json;
+    const {boardJson,icons,typePaintState,selectedType,trackedId,paintId,navState} = json;
     board = new Board(boardJson);
     setBoard(board);
     setIcons(icons);
     setTypePaintState(typePaintState);
     setSelectedType(selectedType);
+    setTrackedId(trackedId);
     setPaintId(paintId);
     setNavState(navState);
     setImportFile(undefined);
