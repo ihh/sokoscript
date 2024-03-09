@@ -4,6 +4,7 @@ import Input from 'rc-input';
 import DebounceInput from 'react-debounce-input';
 import { Icon } from '@iconify/react';
 import natsort from 'natsort';
+import csscolors from 'css-color-names';
 
 import { Board } from './soko/board.js';
 import { parseOrUndefined } from './soko/gramutil.js';
@@ -31,6 +32,8 @@ const playerId = 'Player';
 const defaultBackgroundColor = 'black';
 
 const moveIcon = "oi:move";
+
+const cssColorNames = Object.keys(csscolors).filter ((color) => color !== 'black' && color !== 'transparent' && color.indexOf('white') < 0).sort();
 
 export default function App() {
     let [board, setBoard] = useState(new Board({size:initSize, cell:initCell, types:['_','bee'], grammar:initGrammarText}));
@@ -70,10 +73,8 @@ export default function App() {
                 newIcons[type] = { ...icons[type] || {}, defaultColor: defaultBackgroundColor };
             else {
               const hash = hexMD5(type);
-              const hue = Math.floor (360 * parseInt(hash.substring(0,3),16) / 0x1000);
-              const sat = 30 + Math.floor (40 * parseInt(hash.substring(3,5),16) / 0x100);
-              const lev = 30 + Math.floor (40 * parseInt(hash.substring(5,7),16) / 0x100);
-              newIcons[type] = { ...icons[type] || {}, defaultColor: `hsl(${hue},${sat}%,${lev}%)` };
+              const defaultColor = cssColorNames[parseInt(hash.substring(0,3),16) % cssColorNames.length];
+              newIcons[type] = { ...icons[type] || {}, defaultColor };
             }
         }
     });

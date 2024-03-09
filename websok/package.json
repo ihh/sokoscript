@@ -11,6 +11,7 @@
   },
   "dependencies": {
     "css-color-converter": "^2.0.0",
+    "css-color-names": "^1.0.1",
     "natsort": "^2.0.3",
     "rc-input": "^1.4.3",
     "rc-textarea": "^1.6.3",
