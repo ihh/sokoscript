@@ -50,7 +50,6 @@ export default function App() {
     let [errorMessage, setErrorMessage] = useState(undefined);
     let [importFile, setImportFile] = useState();
 
-
     const { types } = board.typesIncludingUnknowns();
     const typeCount = board.typeCountsIncludingUnknowns();
     const boardJson = board.toJSON();
@@ -124,6 +123,11 @@ export default function App() {
     
     const onPauseRestart = timers.boardTimer ? pause : resume;
 
+    const makeMove = useCallback ((rule) => {
+      moveQueue.moves.push({type:'command',time:nextMoveTime(board)+1n,id:playerId,dir:dirs[Math.floor(Math.random()*dirs.length)],command:rule.command,key:rule.key});
+      forceUpdate();
+    }, [moveQueue, board, forceUpdate]);
+
     const wrapCoord = useCallback ((coord) => {
       while (coord < 0) coord += board.size;
       return coord % board.size;
@@ -180,8 +184,17 @@ export default function App() {
     const playerCell = playerId in board.byID && board.cell[board.byID[playerId]];
     const playerRules = playerCell && board.grammar.transform[playerCell.type].filter((rule) => rule.command || rule.key);
 
+    const makeMoveForKey = useCallback ((evt) => {
+      const targetTag = evt.target.tagName.toUpperCase();
+      if (targetTag !== 'INPUT' && targetTag !== 'TEXTAREA') {
+        const rules = playerRules && playerRules.filter ((rule) => rule.key === evt.key);
+        if (rules?.length)
+          makeMove(rules[0]);
+      }
+    }, [makeMove, playerRules]);
+
 return (
-<>
+<div className="App" onKeyDown={makeMoveForKey} tabIndex="0">
 <div className="NavigationPanel">
 <TiledBoard
   board={board}
@@ -215,8 +228,8 @@ return (
 <div className="PlayerControls">
   {playerCell && (<span>Player actions: </span>)}
   {playerRules && playerRules.map((rule,n)=>(<button key={`command-${n}`}
- onClick={()=>{moveQueue.moves.push({type:'command',time:nextMoveTime(board)+1n,id:playerId,dir:dirs[Math.floor(Math.random()*dirs.length)],command:rule.command,key:rule.key});forceUpdate();}}
->{rule.command || rule.key}</button>))}
+ onClick={()=>makeMove(rule)}
+>{rule.command || ''}<em>{rule.key?` (${rule.key})`:''}</em></button>))}
   <span className="MoveQueue">
     {moveQueue.moves.map((move,n)=>(<span key={`move-${n}`}> {move.command || move.key}</span>))}
   </span></div>
@@ -287,6 +300,6 @@ Tracked cells: {ids.map((id)=>{
   };
   reader.readAsText(importFile);
 }}>Import</button>) : ''}
-</>
+</div>
 );
 }

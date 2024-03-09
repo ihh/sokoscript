@@ -1,4 +1,6 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
+import csscolors from 'css-color-names';
+
 import { useBoardUtils, focusCssColor } from './boardUtils.js';
 import { fromString } from 'css-color-converter';
 import { xy2index } from '../soko/board.js';
@@ -13,7 +15,7 @@ export default function PixelMap(props) {
     const typeRgbaArray = types.map ((type, typeIndex) => {
         const icon = icons[type];
         const cssColor = icon?.color || icon?.defaultColor;
-        return fromString(cssColor).toRgbaArray();
+        return (fromString(cssColor) || fromString(icon.defaultColor)).toRgbaArray();
     });
     const focusRectCssColor = focusCssColor (icons, .5);
 

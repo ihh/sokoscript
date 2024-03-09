@@ -35,7 +35,9 @@ const useBoardUtils = (opts) => {
 }
 
 const focusCssColor = (icons, alpha) => {
-    const bg = fromString(icons._.color || icons._.defaultColor).toRgbaArray();
+    let bg = fromString(icons._.color || icons._.defaultColor);
+    bg = bg || fromString(icons._.defaultColor);
+    bg = bg.toRgbaArray();
     const focusRectRgbaArray = bg.slice(0,3).map((c)=>c^0xc0).concat([typeof(alpha) === 'undefined' ? 1 : alpha]);
     return fromRgba(focusRectRgbaArray).toRgbString();
 }

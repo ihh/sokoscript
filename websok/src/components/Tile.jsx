@@ -1,4 +1,6 @@
 import { Icon } from '@iconify/react';
+import csscolors from 'css-color-names';
+
 import { charRotLookup } from '../soko/lookups.js';
 
 const emptyIcon = "codicon:blank";
@@ -11,7 +13,9 @@ export default function Tile(props) {
     let name = icon?.name || (type==='_' ? emptyIcon : (icon?.rotate ? unknownRotatableIcon : unknownIcon));
     if (name.indexOf(':') < 0)
         name = defaultPrefix + ':' + name;
-    const color = icon?.color || icon?.defaultColor;
+    let color = icon?.color || icon?.defaultColor;
+    if (!(color in csscolors))
+        color = icon?.defaultColor;
     let tileStyle = { ...style || {}, borderColor: focusColor };
     if (icon?.rotate && state?.length > 0)
         tileStyle.transform = 'rotate(' + (charRotLookup[state.charAt(0)] || 0) + 'deg)';
