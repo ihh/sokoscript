@@ -16,6 +16,7 @@ import TiledBoard from './components/TiledBoard.jsx';
 import PixelMap from './components/PixelMap.jsx';
 import Tile from './components/Tile.jsx';
 import BoardSizeSelector from './components/BoardSizeSelector.jsx';
+import ScoreDisplay from './components/ScoreDisplay.jsx';
 
 import './App.css';
 
@@ -254,12 +255,12 @@ return (
   background={background}/>
 </div>
 <span>{hoverCell ? board.getCellDescriptorStringWithCoords(hoverCell.x,hoverCell.y) : (<i>Hover over cell to see state</i>)}</span>
-<div>{playerCell && <span>Player score: {playerCell.meta?.score}</span>}</div>
+<ScoreDisplay score={playerCell?.meta?.score}/>
 <div className="PlayerControls">
-  {playerCell && (<span>Player actions: </span>)}
-  {playerRules && playerCommands.map((command,n)=>(<button key={`command-${n}`}
+  {playerCommands.length===0 ? '' : (<><span>Available player commands:</span>
+  <span> {playerCommands.map((command,n)=>(<button key={`command-${n}`}
  onClick={()=>makeMoveForCommand(command)}
->{command}{playerCommandKey[command] ? (<em> ({playerCommandKey[command]})</em>) : ''}</button>))}
+>{command}{playerCommandKey[command] ? (<em> ({playerCommandKey[command]})</em>) : ''}</button>)) || ''} </span></>)}
   <span className="MoveQueue">
     {moveQueue.moves.map((move,n)=>(<span key={`move-${n}`}> {move.command || move.key}</span>))}
   </span></div>
