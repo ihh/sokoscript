@@ -328,7 +328,7 @@ class Board {
     // evolve board, processing sync rules and moves
     // There is probably no reason to call this with hardStop==true, unless imposing another time limit that is well-defined within the game
     evolveAndProcess (t, moves, hardStop) {
-        moves.filter ((msg) => msg.time > t).toSorted ((a,b) => a.time - b.time).forEach ((move) => {
+        moves.filter ((msg) => msg.time > t).toSorted ((a,b) => a.time > b.time ? +1 : a.time < b.time ? -1 : 0).forEach ((move) => {
             this.evolveToTime (move.time, true);
             this.processMove (move);
         })
