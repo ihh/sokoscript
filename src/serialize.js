@@ -130,11 +130,12 @@ const makeLhs = (lhs) => {
 }
 
 const rhsTerm = (t) => {
+  const id = 'id' in t ? ('~' + t.id) : '';
   if (t.op === 'group')
-    return '$' + t.group;
+    return '$' + t.group + id;
   if (t.op === 'prefix')
-    return '$' + t.group + '/' + stateSuffix(t);
-  return termWithState(t);
+    return '$' + t.group + '/' + stateSuffix(t) + id;
+  return termWithState(t) + id;
 };
 
 const makeRhs = (rhs, sep) => {

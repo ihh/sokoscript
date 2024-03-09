@@ -11,6 +11,22 @@
           .reduce ((result, prop) => result && validatePositionals (expr[prop], matchedStateChars), true);
   };
 
+  const validateIds = (rhs, lhsLen) => !!rhs.reduce ((seen, term) => {
+    let pos;
+    if ('id' in term) {
+      if (term.id > lhsLen)
+        return false;
+      pos = term.id;
+    } else if ('group' in term)
+      pos = term.group;
+    if (pos) {
+      if (seen[pos])
+        return false;
+      seen[pos] = true;
+    }
+    return seen;
+  }, {});
+
   const sum = (weights) => weights.reduce ((s, w) => s + w, 0);
   const reducePred = (args, pred) => args.reduce ((result, arg) => result && pred(arg), true);
   const altList = (alt) => alt.op === 'alt' ? alt.alt : [alt];
@@ -21,7 +37,7 @@
   const validateLhs = (lhs) => lhs.reduce ((memo, term) => ({ result: memo.result && reduceAlt (term, (term) => validateState(term,memo.matchedStateChars,true) && validateAddr(term,memo.matchedStateChars)),
                                                               matchedStateChars: memo.matchedStateChars.concat ([matchedStateChars(term)]) }),
                                                             { result: true, matchedStateChars: [] }).result;
-  const validateRhs = (lhs, rhs) => rhs.reduce ((result, term) => result && reduceAlt (term, (term) => validateState(term,lhs.map(matchedStateChars),false)), true);
+  const validateRhs = (lhs, rhs) => rhs.reduce ((result, term) => result && reduceAlt (term, (term) => validateState(term,lhs.map(matchedStateChars),false)), true) && validateIds(rhs,lhs.length);
 
   const validateInheritance = (rule, rules, error) => {
     if (rule.type === 'transform')
@@ -233,10 +249,10 @@ RhsTermSeq
  / s:RhsTerm { return [s] }
 
 RhsTerm
-  = "$" group:NonZeroInteger "/" state:RhsStateCharSeq { return { op: "prefix", group, state } }
-  / "$" group:NonZeroInteger { return { op: "group", group } }
-  / type:Prefix "/" state:RhsStateCharSeq { return { type, state } }
-  / type:Prefix { return { type } }
+  = "$" group:NonZeroInteger "/" state:RhsStateCharSeq id:OptionalIdTag { return { op: "prefix", group, state, ...id } }
+  / "$" group:NonZeroInteger id:OptionalIdTag { return { op: "group", group, ...id } }
+  / type:Prefix "/" state:RhsStateCharSeq id:OptionalIdTag { return { type, state, ...id } }
+  / type:Prefix id:OptionalIdTag { return { type, ...id } }
   / EmptyLhsTerm { return { type: "_" } }
 
 RhsStateCharSeq
@@ -252,7 +268,9 @@ RhsStateChar
 
 StateChar = [0-9A-Za-z_]
 
-
+OptionalIdTag = "~" group:NonZeroInteger { return { id: group } }
+ / "~0" { return { id: 0 } }
+ / "" { return {} }
 
 Rate
  = "rate={" _ rate:FixedPoint _ "}" { return { rate } }

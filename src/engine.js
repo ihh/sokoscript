@@ -135,16 +135,26 @@ class Matcher {
 
     newCell (t) {
         if (t.op === 'group') {
-            const { type, state, meta } = this.termCell[t.group-1];
+            let { type, state, meta } = this.termCell[t.group-1];
+            if (t.id)
+              meta = this.termCell[t.id-1].meta;
+            else if (t.id === 0)
+              meta = undefined;
             return { type, state, meta }
         }
         if (t.op === 'prefix') {
-            const { type, state, meta } = this.termCell[t.group-1];
-            const newState = t.state ? t.state.map(this.computeStateChar.bind(this)).join('') : '';
-            return { type, state: newState, meta }
+            let { type, meta } = this.termCell[t.group-1];
+            const state = t.state ? t.state.map(this.computeStateChar.bind(this)).join('') : '';
+            if (t.id)
+              meta = this.termCell[t.id-1].meta;
+            else if (t.id === 0)
+              meta = undefined;
+            return { type, state, meta }
         }
+        const { type } = t;
         const state = t.state ? t.state.map(this.computeStateChar.bind(this)).join('') : '';
-        return { type: t.type, state }
+        const meta = t.id ? this.termCell[t.id-1].meta : undefined;
+        return { type: t.type, state, meta };
     }
     
     newCellUpdate (term,pos) {
