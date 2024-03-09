@@ -8,7 +8,7 @@ import natsort from 'natsort';
 import { Board } from './soko/board.js';
 import { parseOrUndefined } from './soko/gramutil.js';
 import { hexMD5 } from './soko/md5.js';
-import { charLookup } from './soko/lookups.js';
+import { charLookup, dirs } from './soko/lookups.js';
 import { xy2index } from './soko/board.js';
 
 import TiledBoard from './components/TiledBoard.jsx';
@@ -215,7 +215,7 @@ return (
 <div className="PlayerControls">
   {playerCell && (<span>Player actions: </span>)}
   {playerRules && playerRules.map((rule,n)=>(<button key={`command-${n}`}
- onClick={()=>{moveQueue.moves.push({type:'command',time:nextMoveTime(board)+1n,id:playerId,dir:'N',command:rule.command,key:rule.key});forceUpdate();}}
+ onClick={()=>{moveQueue.moves.push({type:'command',time:nextMoveTime(board)+1n,id:playerId,dir:dirs[Math.floor(Math.random()*dirs.length)],command:rule.command,key:rule.key});forceUpdate();}}
 >{rule.command || rule.key}</button>))}
   <span className="MoveQueue">
     {moveQueue.moves.map((move,n)=>(<span key={`move-${n}`}> {move.command || move.key}</span>))}
