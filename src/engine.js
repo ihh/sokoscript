@@ -63,13 +63,14 @@ class Matcher {
         return t;
       switch (t.op) {
       case 'char':
-        return t;
+        return t.char;
       case 'clock':
       case 'anti':
         return lookups.charPermLookup.rotate[t.op][this.computeStateChar(t.arg)];
       case 'add':
         return lookups.charPermLookup.intAdd[this.computeStateChar(t.right)][this.computeStateChar(t.left)];
       case 'sub':
+        return lookups.charPermLookup.intSub[this.computeStateChar(t.right)][this.computeStateChar(t.left)];
       case '+':
         return lookups.charPermLookup.vecAdd[this.computeStateChar(t.right)][this.computeStateChar(t.left)];
       case '-':
