@@ -1,0 +1,10 @@
+bee _ : $2 $1, rate=999.
+rock = bee.
+scissors = bee.
+paper = bee.
+bee : _, rate=0.01.
+bee _ : $1 $1, rate=.05.
+bee bee: _ _, rate=0.01.
+rock scissors: $1 $1, rate=999.
+scissors paper: $1 $1, rate=999.
+paper rock: $1 $1, rate=999.

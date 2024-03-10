@@ -1,6 +1,7 @@
-sandpile/[0123]: sandpile/@add(@int(1),$#1), rate=0.1.
-sandpile/4 : avalanche/4.
-avalanche/[1234] _: avalanche/@sub($1#1,@int(1)) sandpile/1, rate=10.
-avalanche/[1234] sandpile/[0123]: avalanche/@sub($1#1,@int(1)) sandpile/@add(@int(1),$2#1), rate=10.
-avalanche/0: sandpile/0.
-avalanche/[1234]: sandpile/$#1, rate=0.1.
+bee:_.
+sandpile: $1/0.
+sandpile/[0123]: $1/@add(@int(1),$#1), rate=0.1.
+sandpile/4 : avalanche/@F4~1.
+avalanche/?[1234] _: $1/@clock($1#1)@sub($1#2,@int(1)) sandpile/1, rate=10.
+avalanche/?[1234] sandpile/[0123]: $1/@clock($1#1)@sub($1#2,@int(1)) $2/@add(@int(1),$2#1), rate=10.
+avalanche/?0: sandpile/0~1.
