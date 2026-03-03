@@ -1,0 +1,27 @@
+// Ecosystem - A prey-predator-plant simulation
+// Watch plants grow, herbivores graze, and predators hunt.
+// A balanced ecosystem emerges from simple rules.
+
+// Plants grow on empty ground
+soil : plant, rate=0.05.
+
+// Plants spread to adjacent soil
+plant soil : plant plant, rate=0.02.
+
+// Herbivores eat plants (reproduce by eating)
+herbivore plant : herbivore herbivore, rate=2.
+
+// Herbivores wander
+herbivore soil : soil herbivore, rate=0.5.
+
+// Herbivores starve without food (slow death)
+herbivore : soil, rate=0.02.
+
+// Predators eat herbivores (reproduce by eating)
+predator herbivore : predator predator, rate=3.
+
+// Predators wander
+predator soil : soil predator, rate=1.
+
+// Predators starve without prey (faster than herbivores)
+predator : soil, rate=0.05.

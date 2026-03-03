@@ -1,0 +1,51 @@
+// Forest Fire - A firefighting cellular automata game
+// Control your fireman with WASD. Walk into fires to extinguish them.
+// Trees grow, lightning strikes, fires spread. Save the forest!
+
+// Tree growth (grass sprouts trees)
+grass : tree, rate=0.005.
+
+// Lightning (rare spontaneous fire)
+tree : fire, rate=0.002.
+
+// Fire spreads to adjacent trees
+tree fire : fire fire, rate=3.
+
+// Fire burns out to ash
+fire : ash, rate=0.2.
+
+// Ash decays back to grass
+ash : grass, rate=0.05.
+
+// Water evaporates
+water : grass, rate=0.3.
+
+// Fireman extinguishes adjacent fire (WASD, put out fire and score!)
+fireman >N> fire : fireman water, key={w} score=1.
+fireman >S> fire : fireman water, key={s} score=1.
+fireman >E> fire : fireman water, key={d} score=1.
+fireman >W> fire : fireman water, key={a} score=1.
+
+// Fireman movement on empty ground (WASD)
+fireman >N> _ : _ fireman, key={w}.
+fireman >S> _ : _ fireman, key={s}.
+fireman >E> _ : _ fireman, key={d}.
+fireman >W> _ : _ fireman, key={a}.
+
+// Fireman can walk over grass
+fireman >N> grass : _ fireman, key={w}.
+fireman >S> grass : _ fireman, key={s}.
+fireman >E> grass : _ fireman, key={d}.
+fireman >W> grass : _ fireman, key={a}.
+
+// Fireman can walk over ash
+fireman >N> ash : _ fireman, key={w}.
+fireman >S> ash : _ fireman, key={s}.
+fireman >E> ash : _ fireman, key={d}.
+fireman >W> ash : _ fireman, key={a}.
+
+// Fireman can walk over water
+fireman >N> water : _ fireman, key={w}.
+fireman >S> water : _ fireman, key={s}.
+fireman >E> water : _ fireman, key={d}.
+fireman >W> water : _ fireman, key={a}.
