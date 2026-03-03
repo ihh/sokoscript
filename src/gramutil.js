@@ -155,11 +155,18 @@ const compileTypes = (rules) => {
     const syncTransform = index.syncRates.map ((r) => compileTransform (types, index.syncTransform[r], typeIndex, 'sync', 1));
 
     // convert from microHertz rate to Hertz with rejection
+    // Rules with key or command attributes are excluded from async evolution (rate_Hz=0)
+    // so they only fire in response to player input via processMove
     const bigMillion = BigInt(million), big2pow30minus1 = BigInt(0x3fffffff), bigMillion_leftShift32 = bigMillion << BigInt(32);
     transform.forEach ((rules) =>
         rules.forEach ((rule) => {
-            rule.rate_Hz = BigInt (Math.ceil (rule.rate / million));
-            rule.acceptProb_leftShift30 = rule.rate && Number (BigInt(rule.rate) * big2pow30minus1 / (rule.rate_Hz * bigMillion));
+            if (rule.key || rule.command) {
+                rule.rate_Hz = BigInt(0);
+                rule.acceptProb_leftShift30 = 0;
+            } else {
+                rule.rate_Hz = BigInt (Math.ceil (rule.rate / million));
+                rule.acceptProb_leftShift30 = rule.rate && Number (BigInt(rule.rate) * big2pow30minus1 / (rule.rate_Hz * bigMillion));
+            }
         }))
 
     let command = types.map(()=>({})), key = types.map(()=>({}));

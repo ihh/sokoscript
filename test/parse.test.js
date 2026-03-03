@@ -90,10 +90,11 @@ describe ('Testing the parser', () => {
     })
 
     it ('State expressions', (done) => {
-        // Vector literal (non-negative)
+        // Vector literal
         testParse ('a/@vec(1,2) : b.');
         testParse ('a/@vec(0,0) : b.');
         testParse ('a/@vec(4,4) : b.');
+        testParse ('a/@vec(-3,4) : b.');
         // Integer literal
         testParse ('a/@int(3) : b.');
         testParse ('a/@int(0) : b.');
@@ -103,8 +104,8 @@ describe ('Testing the parser', () => {
         // Clock and anti rotation
         testParse ('a/? : b/@clock($#1).', {expect:'a/? : b/@clock($1#1).'});
         testParse ('a/? : b/@anti($#1).', {expect:'a/? : b/@anti($1#1).'});
-        // State references (double-slash in serialization of $group/state is a known bug)
-        testParse ('a/? b/? : $1 $2/@sub($2#1,$1#1).', {expect:'a/? b/? : $1 $2//@sub($2#1,$1#1).'});
+        // State references with $group/state prefix
+        testParse ('a/? b/? : $1 $2/@sub($2#1,$1#1).');
         // Matrix transforms require parentheses and a vector operand
         // PEG grammar uses D,B,L,R,H,V for matrices (not F; F is a direction)
         // Serializer always includes explicit * between matrix and operand
@@ -158,8 +159,8 @@ describe ('Testing the parser', () => {
         testParse ('a b : $1 $2.');
         // Swap
         testParse ('a b : $2 $1.');
-        // Group with prefix (new state) — note: serializer produces $group//state due to double-slash bug
-        testParse ('a/? b : $1/x $2.', {expect:'a/? b : $1//x $2.'});
+        // Group with prefix (new state)
+        testParse ('a/? b : $1/x $2.');
         // ID tags
         testParse ('a b : a~1 b.');
         testParse ('a b c : $2~1 $1 $3.', {expect:'a b c : $2~1 $1 $3.'});
@@ -184,14 +185,15 @@ describe ('Testing the parser', () => {
     it ('Score attribute', (done) => {
         testParse ('a : b, score=1.');
         testParse ('a : b, score=10.');
-        // Note: negative scores don't round-trip due to SignedInteger parser issue
+        testParse ('a : b, score=-5.');
         testParse ('a : b, rate=2 score=3.');
         done();
     })
 
-    it ('Sound attribute', (done) => {
+    it ('Sound and caption attributes', (done) => {
         testParse ('a : b, sound={pop}.');
-        testParse ('a : b, rate=1 sound={zap}.');
+        testParse ('a : b, caption={hello world}.');
+        testParse ('a : b, rate=1 sound={zap} caption={fire!}.');
         done();
     })
 
@@ -212,7 +214,6 @@ describe ('Testing the parser', () => {
 
     it ('Serialization round-trips', (done) => {
         // Parse, serialize, re-parse, re-serialize should be stable
-        // Note: grammars with $group/state prefix are excluded due to double-slash serialization bug
         const grammars = [
             'a b : $2 $1.',
             'a >N> b : c.',
@@ -223,6 +224,9 @@ describe ('Testing the parser', () => {
             'a b c : $2~1 $1 $3.',
             'a/? : b/@add(@int(1),$#1).',
             'a _ : _ a, rate=5.',
+            'a/? b : $1/x $2.',
+            'a : b, score=-3.',
+            'a : b, caption={hello}.',
         ];
         grammars.forEach ((g) => {
             const rules1 = parseOrUndefined(g, {error:false});
@@ -262,7 +266,9 @@ describe ('Testing the parser', () => {
         // Duplicate attributes
         testParse ('a : b, rate=1 rate=2', {error:/Duplicate attribute/});
         testParse ('a : b, command={x} command={y}', {error:/Duplicate attribute/});
-        // Circular inheritance (note: single-rule self-inheritance like 'a = a.' is not caught by validator)
+        // Self-inheritance
+        testParse ('a = a.', {error:/inherits from itself/,suppressLocation:true});
+        // Circular inheritance
         testParse ('a = b. b = a.', {error:/inherits from itself/,suppressLocation:true});
         done();
     })

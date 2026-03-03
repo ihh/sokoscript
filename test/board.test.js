@@ -172,6 +172,16 @@ describe ('Testing the Board', () => {
         expect(board.getCellDescriptorString(4, 4)).to.equal('_');
     });
 
+    it ('Key/command rules do not fire spontaneously', () => {
+        // Rules with key or command should only fire via processMove, not async evolution
+        const board = new Board({ size: 4, seed: 42, grammar: 'player _ : _ player, key={w}.' });
+        board.setCellTypeByName(2, 2, 'player', '', { id: 'p1' });
+        const initialPos = board.byID['p1'];
+        // Evolve for 5 seconds — player should NOT move spontaneously
+        board.evolveToTime(5n << 32n, true);
+        expect(board.byID['p1']).to.equal(initialPos);
+    });
+
     it ('RangeCounter operations', () => {
         // RangeCounter is tested indirectly through Board type tracking
         const board = new Board({ size: 4, grammar: 'a _ : _ a. b _ : _ b.' });

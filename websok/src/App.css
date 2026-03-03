@@ -1,13 +1,403 @@
+/* SokoScript UI */
+
+:root {
+    --bg-primary: #1a1a2e;
+    --bg-secondary: #16213e;
+    --bg-panel: #0f3460;
+    --bg-input: #1a1a2e;
+    --text-primary: #e0e0e0;
+    --text-secondary: #a0a0b0;
+    --text-muted: #707080;
+    --accent: #e94560;
+    --accent-hover: #ff6b81;
+    --border: #2a2a4a;
+    --success: #4ecca3;
+    --warning: #ffc93c;
+}
+
+.App {
+    font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+    color: var(--text-primary);
+    background: var(--bg-primary);
+    min-height: 100vh;
+    padding: 12px 16px;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    outline: none;
+}
+
+/* Header */
+.AppHeader {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 4px 0;
+    border-bottom: 1px solid var(--border);
+    margin-bottom: 2px;
+}
+
+.AppHeader h1 {
+    margin: 0;
+    font-size: 1.3em;
+    font-weight: 600;
+    color: var(--accent);
+    letter-spacing: 0.5px;
+}
+
+.AppHeader .preset-controls {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+/* Main Layout */
+.MainLayout {
+    display: flex;
+    gap: 16px;
+    flex-wrap: wrap;
+}
+
+.BoardPanel {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.SidePanel {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    min-width: 280px;
+    flex: 1;
+}
+
+/* Navigation / Board views */
 .NavigationPanel {
     display: flex;
     flex-direction: row;
-    justify-content: space-between;
+    gap: 10px;
+    align-items: flex-start;
 }
 
+/* Status bar under board */
+.StatusBar {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    font-size: 0.85em;
+    color: var(--text-secondary);
+    padding: 4px 0;
+}
+
+.StatusBar .cell-info {
+    flex: 1;
+}
+
+.StatusBar .cell-info i {
+    color: var(--text-muted);
+}
+
+.StatusBar .time-display {
+    font-variant-numeric: tabular-nums;
+    color: var(--text-muted);
+}
+
+/* Score Display */
+.ScoreDisplay {
+    font-weight: 600;
+    color: var(--warning);
+    font-size: 0.95em;
+}
+
+/* Transport Controls */
+.TransportControls {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+/* Player Controls */
 .PlayerControls {
     min-height: 1.5em;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    flex-wrap: wrap;
+    font-size: 0.9em;
+}
+
+.PlayerControls .command-label {
+    color: var(--text-secondary);
+}
+
+.MoveQueue {
+    color: var(--text-muted);
+    font-size: 0.85em;
+}
+
+/* Palette */
+.PaletteSection {
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 0;
+    overflow: hidden;
+}
+
+.PaletteSection .section-header {
+    background: var(--bg-secondary);
+    padding: 6px 10px;
+    font-size: 0.8em;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    color: var(--text-secondary);
+    border-bottom: 1px solid var(--border);
+}
+
+table.palette {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.85em;
+}
+
+table.palette td {
+    padding: 3px 4px;
+    vertical-align: middle;
+}
+
+table.palette tr:hover {
+    background: var(--bg-secondary);
+}
+
+table.palette tr.selected-type {
+    background: var(--bg-panel);
+}
+
+.paletteTypeIcon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 20px;
+    height: 20px;
+}
+
+.paletteTypeName {
+    font-size: 0.9em;
+}
+
+.paletteTypeCount {
+    color: var(--text-muted);
+    font-size: 0.8em;
+}
+
+.paletteRotationCheckbox {
+    font-size: 0.8em;
+    color: var(--text-secondary);
+}
+
+.paletteRotationCheckbox label {
+    margin-left: 3px;
+}
+
+/* Paint mode */
+.PaintMode {
+    font-size: 0.85em;
+    color: var(--text-secondary);
+    padding: 4px 0;
+}
+
+/* Tracked IDs */
+.trackedIds {
+    font-size: 0.85em;
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    flex-wrap: wrap;
+    color: var(--text-secondary);
 }
 
 .SelectedId {
     font-weight: bold;
+    color: var(--accent);
+}
+
+.UnselectedId {
+    color: var(--text-primary);
+}
+
+/* Board Size Controls */
+.BoardControls {
+    display: flex;
+    gap: 10px;
+    flex-wrap: wrap;
+    align-items: center;
+    font-size: 0.85em;
+}
+
+.BoardControls label {
+    color: var(--text-secondary);
+    margin-right: 3px;
+}
+
+/* Grammar Editor */
+.GrammarSection {
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    overflow: hidden;
+}
+
+.GrammarSection .section-header {
+    background: var(--bg-secondary);
+    padding: 6px 10px;
+    font-size: 0.8em;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    color: var(--text-secondary);
+    border-bottom: 1px solid var(--border);
+}
+
+.GrammarSection textarea,
+.GrammarSection .rc-textarea {
+    width: 100% !important;
+    box-sizing: border-box;
+    background: var(--bg-input);
+    color: var(--text-primary);
+    border: none;
+    padding: 8px 10px;
+    font-family: 'Fira Code', 'Cascadia Code', 'JetBrains Mono', 'Consolas', monospace;
+    font-size: 0.85em;
+    line-height: 1.5;
+    resize: vertical;
+    outline: none;
+}
+
+.GrammarSection textarea:focus,
+.GrammarSection .rc-textarea:focus {
+    background: #1e1e3a;
+}
+
+.ErrorMessage {
+    color: var(--accent);
+    font-size: 0.8em;
+    padding: 4px 10px;
+    background: rgba(233, 69, 96, 0.1);
+    border-top: 1px solid rgba(233, 69, 96, 0.3);
+}
+
+/* Import/Export */
+.IOControls {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+    font-size: 0.85em;
+}
+
+/* Buttons */
+button {
+    background: var(--bg-panel);
+    color: var(--text-primary);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 4px 12px;
+    cursor: pointer;
+    font-size: 0.85em;
+    transition: background 0.15s, border-color 0.15s;
+}
+
+button:hover {
+    background: var(--accent);
+    border-color: var(--accent);
+    color: white;
+}
+
+button:active {
+    background: var(--accent-hover);
+}
+
+button.primary {
+    background: var(--accent);
+    border-color: var(--accent);
+    color: white;
+}
+
+button.primary:hover {
+    background: var(--accent-hover);
+    border-color: var(--accent-hover);
+}
+
+/* Select elements */
+select {
+    background: var(--bg-input);
+    color: var(--text-primary);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 3px 6px;
+    font-size: 0.85em;
+    cursor: pointer;
+}
+
+select:focus {
+    border-color: var(--accent);
+    outline: none;
+}
+
+/* Input elements */
+input[type="text"],
+.rc-input {
+    background: var(--bg-input);
+    color: var(--text-primary);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 3px 6px;
+    font-size: 0.85em;
+}
+
+input[type="text"]:focus,
+.rc-input:focus {
+    border-color: var(--accent);
+    outline: none;
+}
+
+input[type="file"] {
+    font-size: 0.8em;
+    color: var(--text-secondary);
+}
+
+/* Radio buttons */
+input[type="radio"] {
+    accent-color: var(--accent);
+}
+
+input[type="checkbox"] {
+    accent-color: var(--accent);
+}
+
+/* Pixel Map */
+.PixelMap {
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    overflow: hidden;
+}
+
+/* Tiled Board */
+.TiledBoard {
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    overflow: hidden;
+}
+
+/* Fieldset overrides */
+fieldset {
+    border: none;
+    padding: 0;
+    margin: 0;
+}
+
+/* Global body styling */
+body {
+    margin: 0;
+    padding: 0;
+    background: var(--bg-primary);
 }

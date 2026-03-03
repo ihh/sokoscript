@@ -82,8 +82,8 @@ RuleTop = _ s:RuleSet { return s }
 
 RuleSet
  = r:Rule _ "." _ s:RuleSet &{ return validateInheritance(r,s,error) } { return [r].concat(s) }
- / r:Rule _ "." _ { return [r] }
- / r:Rule _ { return [r] }
+ / r:Rule _ "." _ &{ return validateInheritance(r,[],error) } { return [r] }
+ / r:Rule _ &{ return validateInheritance(r,[],error) } { return [r] }
  / c:Comment _ s:RuleSet { return [c].concat (s) }
  / c:Comment _ { return [c] }
 
@@ -301,8 +301,8 @@ Sound
  / "sound=" sound:AttrString { return { sound } }
 
 Caption
- = "caption={" caption:EscapedString "}" { return caption }
- / "caption=" caption:AttrString { return caption }
+ = "caption={" caption:EscapedString "}" { return { caption } }
+ / "caption=" caption:AttrString { return { caption } }
 
 
 NonZeroInteger
@@ -313,9 +313,9 @@ PositiveInteger
   / NonZeroInteger
 
 SignedInteger
- = PositiveInteger
- / "-" NonZeroInteger
- / "0"
+ = PositiveInteger { return text() }
+ / "-" NonZeroInteger { return text() }
+ / "0" { return text() }
 
 FixedPoint
  = i:$IntegerPart "." f:FractionalPart { return 1000000 * parseInt(i) + parseInt(f) }

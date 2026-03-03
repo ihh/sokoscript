@@ -134,7 +134,7 @@ const rhsTerm = (t) => {
   if (t.op === 'group')
     return '$' + t.group + id;
   if (t.op === 'prefix')
-    return '$' + t.group + '/' + stateSuffix(t) + id;
+    return '$' + t.group + stateSuffix(t) + id;
   return termWithState(t) + id;
 };
 
