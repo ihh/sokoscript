@@ -483,12 +483,19 @@ export default function App() {
       });
       setIcons(mergedIcons);
       setSelectedType(undefined);
-      setTrackedId(undefined);
+      setTrackedId(playerId in newBoard.byID ? playerId : undefined);
       setTypePaintState({});
       setPaintId(undefined);
       moveQueue.moves = [];
       const viewSize = preset.size <= 16 ? 8 : preset.size <= 32 ? 16 : 32;
-      setNavState({ top: 0, left: 0, pixelsPerTile: 32, tilesPerSide: viewSize });
+      const offset = viewSize >> 1;
+      let navTop = 0, navLeft = 0;
+      if (playerId in newBoard.byID) {
+        const [px, py] = newBoard.index2xy(newBoard.byID[playerId]);
+        navLeft = ((px - offset) % preset.size + preset.size) % preset.size;
+        navTop = ((py - offset) % preset.size + preset.size) % preset.size;
+      }
+      setNavState({ top: navTop, left: navLeft, pixelsPerTile: 32, tilesPerSide: viewSize });
       forceUpdate();
     }, [stopTimer, forceUpdate, moveQueue]);
 
