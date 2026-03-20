@@ -180,4 +180,15 @@ const serialize = (rules) => {
   }).join("");
 }
 
-export { serialize, lhsTerm }
+const serializeRuleWithTypes = (rule, types) => {
+    const resolve = (t) => {
+        if (t.op === 'negterm') return { ...t, term: resolve(t.term) };
+        if (t.op === 'alt') return { ...t, alt: t.alt.map(resolve) };
+        if (t.op === 'group' || t.op === 'prefix') return t;
+        return typeof(t.type) === 'number' ? { ...t, type: types[t.type] } : t;
+    };
+    const resolved = { ...rule, lhs: rule.lhs.map(resolve), rhs: rule.rhs.map(resolve) };
+    return serialize([resolved]).trim();
+};
+
+export { serialize, serializeRuleWithTypes, lhsTerm }

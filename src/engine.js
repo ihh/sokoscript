@@ -121,7 +121,7 @@ class Matcher {
             if (pos === 0)
                 x = y = 0;
             else
-                [x,y] = this.computeAddr (term.addr || { op: 'relative', dir: 'F' }, this.termAddr[pos-1], pos);
+                [x,y] = this.computeAddr (term.addr || { op: 'reldir', dir: 'F' }, this.termAddr[pos-1], pos);
             this.termAddr.push ([x,y]);
             const cell = this.board.getCell (x + this.x, y + this.y);
             const { type, state } = cell;

@@ -41,7 +41,7 @@ describe ('Testing game grammars', () => {
         board.setCellTypeByName(4, 3, 'grass');
         const move = { type: 'command', time: 1n, id: 'p1', dir: 'N', key: 'w' };
         board.processMove(move);
-        expect(board.getCellDescriptorString(4, 3)).to.equal('fireman');
+        expect(board.getCellDescriptorString(4, 3)).to.equal('fireman {"id":"p1"}');
     });
 
     it ('Forest fire: fireman extinguishes fire', () => {

@@ -2,6 +2,8 @@ import * as lookups from './lookups.js';
 import { applyTransformRule, transformRuleUpdate } from './engine.js';
 import { fastLn_leftShift26_max, fastLn_leftShift26 } from './log2.js';
 import { parseOrUndefined, compileTypes } from './gramutil.js';
+import { serializeRuleWithTypes } from './serialize.js';
+import { TraceBuffer } from './trace.js';
 import { MersenneTwister } from './MersenneTwister.js';
 import { stringify } from './canonical-json.js';
 
@@ -255,7 +257,7 @@ class Board {
                 const cell = this.cell[index];
                 if (typeof(cell.owner) === 'undefined' || user === cell.owner || user === Board.owner) {
                     const rules = command ? this.grammar.command[cell.type][command] : this.grammar.key[cell.type][key];
-                    rules.reduce ((success, rule) => success || applyTransformRule (this, x, y, dir, rule), false);
+                    rules.reduce ((success, rule) => success || this._traceApplyRule ('move', x, y, dir, rule), false);
                 }
             }
         } else if (move.type === 'write') {
@@ -299,7 +301,7 @@ class Board {
                 break;
             }
             const { wait, x, y, rule, dir } = r;
-            applyTransformRule (this, x, y, dir, rule);
+            this._traceApplyRule ('async', x, y, dir, rule);
             this.time = this.lastEventTime = this.lastEventTime + wait;
         }
     }
@@ -321,7 +323,7 @@ class Board {
                             return l.concat (rules.map ((rule) => [xy,rule]));
                         }, []));
                     }, [])), [])).forEach ((xy_rule) =>
-                        applyTransformRule(this,xy_rule[0][0],xy_rule[0][1],this.randomDir(),xy_rule[1]));
+                        this._traceApplyRule('sync',xy_rule[0][0],xy_rule[0][1],this.randomDir(),xy_rule[1]));
         }
     }
 
@@ -409,6 +411,31 @@ class Board {
                                               ...(meta ? {meta} : {})});
             });
         }
+        this.trace = new TraceBuffer();
+        this.trace.push({ type: 'init', time: this.time.toString(), boardSize: this.size, grammar: this.grammarSource });
+    }
+
+    _traceApplyRule(category, x, y, dir, rule) {
+        const updates = transformRuleUpdate(this, x, y, dir, rule);
+        if (!updates) return false;
+
+        const before = updates.map(([ux, uy]) => {
+            const cell = this.getCell(ux, uy);
+            return { x: ux, y: uy, type: this.grammar.types[cell.type], state: cell.state };
+        });
+
+        updates.forEach((update) => update && this.setCell(...update));
+
+        const after = updates.map(([ux, uy]) => {
+            const cell = this.getCell(ux, uy);
+            return { x: ux, y: uy, type: this.grammar.types[cell.type], state: cell.state };
+        });
+
+        this.trace.push({ type: category, time: this.time.toString(), x, y, dir,
+            ruleText: serializeRuleWithTypes(rule, this.grammar.types),
+            subjectType: this.grammar.types[rule.lhs[0].type],
+            before, after });
+        return true;
     }
 
     // TODO

@@ -301,6 +301,7 @@ export default function App() {
     const { types } = board.typesIncludingUnknowns();
     const typeCount = board.typeCountsIncludingUnknowns();
     const boardJson = board.toJSON();
+    if (typeof window !== 'undefined') window.__boardTrace = board.trace;
 
     const forceUpdate = useCallback (() => setMoveCounter(moveCounter+1), [moveCounter]);
 
@@ -428,6 +429,8 @@ export default function App() {
     const mapPixelsPerCell = Math.max (1, Math.floor (navState.pixelsPerTile * navState.tilesPerSide / board.size));
 
     const ids = Object.keys(board.byID).sort(natsort());
+    if (!trackedId && playerId in board.byID)
+        setTrackedId(playerId);
 
     const playerCell = playerId in board.byID && board.cell[board.byID[playerId]];
     const playerRules = playerCell && board.grammar.transform[playerCell.type];
@@ -630,6 +633,12 @@ return (
     a.download = 'board.json';
     a.click();
   }}>Export</button>
+  <button onClick={()=>{
+    const trace = board.trace.toJSON();
+    trace.grammar = board.grammarSource;
+    trace.boardSize = board.size;
+    navigator.clipboard.writeText(JSON.stringify(trace, null, 2));
+  }}>Copy Trace</button>
   <input type="file" onChange={(evt)=>setImportFile(evt.target.files[0])}/>
   {importFile ? (<button onClick={()=>{
     const reader = new FileReader();
