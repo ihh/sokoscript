@@ -1,0 +1,55 @@
+/* GrammarEditor — textarea with syntax-highlighted preview below */
+
+.grammar-editor {
+    width: 100%;
+}
+
+.grammar-editor-textarea {
+    font-family: 'Fira Code', 'Cascadia Code', 'JetBrains Mono', 'Consolas', monospace;
+    font-size: 0.85em;
+    line-height: 1.5;
+    padding: 8px 10px;
+    margin: 0;
+    border: none;
+    white-space: pre-wrap;
+    word-wrap: break-word;
+    box-sizing: border-box;
+    width: 100%;
+    tab-size: 4;
+    background: var(--bg-secondary, #1a1a2e);
+    color: var(--text-primary, #e0e0e0);
+    caret-color: var(--text-primary, #e0e0e0);
+    resize: vertical;
+    outline: none;
+    min-height: 100px;
+    overflow: auto;
+}
+
+.grammar-editor-preview {
+    font-family: 'Fira Code', 'Cascadia Code', 'JetBrains Mono', 'Consolas', monospace;
+    font-size: 0.85em;
+    line-height: 1.5;
+    padding: 8px 10px;
+    margin: 0;
+    border-top: 1px solid var(--border-color, #333);
+    white-space: pre-wrap;
+    word-wrap: break-word;
+    box-sizing: border-box;
+    width: 100%;
+    tab-size: 4;
+    background: var(--bg-tertiary, #0d0d1a);
+    overflow: auto;
+    max-height: 200px;
+}
+
+/* Token colors */
+.sok-comment     { color: #787878; font-style: italic; }
+.sok-type        { color: #64b4ff; }
+.sok-address     { color: #e6c83c; }
+.sok-state       { color: #50c878; }
+.sok-operator    { color: #ffffff; font-weight: bold; }
+.sok-attribute   { color: #dc82dc; }
+.sok-reference   { color: #e6a03c; }
+.sok-expression  { color: #50c8c8; }
+.sok-punctuation { color: #8c8ca0; }
+.sok-text        { color: var(--text-primary, #e0e0e0); }
