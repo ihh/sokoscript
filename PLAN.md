@@ -1,8 +1,8 @@
 # SokoScript Development Plan
 
-## Phase 1: Testing & Stability
+## Phase 1: Testing & Stability ✅
 
-### 1.1 Expand Parser Tests
+### 1.1 Expand Parser Tests ✅
 - Test all state expression types (`@vec`, `@int`, `@add`, `@sub`, `@clock`, `@anti`)
 - Test all address types (relative, absolute, neighbor, cell)
 - Test wildcards, character classes, negation, alternatives
@@ -12,7 +12,7 @@
 - Test serialization round-trips (parse -> serialize -> parse)
 - Test error cases: invalid rates, out-of-range references, malformed rules
 
-### 1.2 Engine Tests
+### 1.2 Engine Tests ✅
 - Test `RangeCounter`: add, remove, total, kthElement with various sizes
 - Test `Board` creation, `initFromJSON`/`toJSON` round-trips
 - Test `setCellTypeByName`, type lookup, unknown type handling
@@ -23,68 +23,26 @@
 - Test player commands and key handling
 - Test move processing (command, write, grammar moves)
 
-### 1.3 Lookup Table Tests
+### 1.3 Lookup Table Tests ✅
 - Test vector/char encoding round-trips
 - Test matrix multiplication tables
 - Test neighborhood computations
 
-## Phase 2: Example Games
+## Phase 2: Example Games ✅
 
-### 2.1 Forest Fire (Cellular Automata Game)
-A game where the player controls a fireman trying to extinguish spreading fires while trees grow.
+### 2.1 Forest Fire ✅
+Grammar file: `grammars/forest_fire.txt`. Web UI preset with icons.
 
-**Types:**
-- `tree` — grows from grass, can catch fire
-- `fire` — spreads to adjacent trees
-- `ash` — left after fire burns out, slowly becomes grass
-- `grass` — empty ground, trees grow here
-- `water` — blocks fire, placed by fireman
-- `fireman` — player-controlled, sprays water
+### 2.2 Sokoban Classic ✅
+Grammar file: `grammars/sokoban.txt`. Web UI preset with icons.
 
-**Rules:**
-- Trees grow from grass at low rate
-- Fire spreads to adjacent trees at moderate rate
-- Fire burns out to ash after a while
-- Ash decays to grass slowly
-- Fireman moves in commanded direction
-- Fireman pushes water (Sokoban-style) or sprays water adjacent
-- Score for each fire extinguished
-
-**Grammar file:** `grammars/forest_fire.txt`
-**Board file:** `boards/forest_fire.json`
-
-### 2.2 Sokoban Classic
-A proper Sokoban puzzle with crates and targets.
-
-**Types:**
-- `player` — user-controlled
-- `crate` — pushable
-- `wall` — immovable
-- `target` — goal position
-- `crate_on_target` — crate placed on target (score!)
-
-**Grammar file:** `grammars/sokoban.txt`
-**Board file:** `boards/sokoban.json`
-
-### 2.3 Ecosystem Simulation
-A richer prey-predator-plant ecosystem (building on existing `lv3.txt`).
-
-**Types:**
-- `plant` — grows spontaneously
-- `herbivore` — eats plants, reproduces
-- `predator` — eats herbivores, reproduces
-- `_` — empty space
-
-**Grammar file:** `grammars/ecosystem.txt`
+### 2.3 Ecosystem Simulation ✅
+Grammar file: `grammars/ecosystem.txt`. Web UI preset with icons.
 
 ## Phase 3: Documentation
 
-### 3.1 README.md
-- Project overview and motivation
-- Quick start guide (install, run web UI, try example grammars)
-- Link to grammar language reference
-- Screenshots or diagrams of example games
-- Architecture overview
+### 3.1 README.md ✅
+- Project overview, quick start, grammar reference, architecture overview
 
 ### 3.2 Grammar Language Tutorial
 - `docs/grammar-tutorial.md`
@@ -105,36 +63,87 @@ A richer prey-predator-plant ecosystem (building on existing `lv3.txt`).
 - Grammar compilation pipeline
 - Serialization format
 
-## Phase 4: Web UI Improvements
+## Phase 4: Terminal Debugger
 
-### 4.1 Game Selector
-- Dropdown or menu to load example grammars and boards
-- Bundled game presets (forest fire, sokoban, ecosystem, etc.)
+Pure Node.js TUI debugger (zero external TUI deps, ANSI escape codes only).
+Inspired by the 6502life terminal debugger. See `docs/terminal-debugger-proposal.md` for full design.
 
-### 4.2 Improved Game Controls
-- Better keyboard handling (arrow keys for movement)
-- Touch support for mobile
+### 4.1 Core TUI Framework
+- `ansi.js`, `input.js`, `layout.js` — three-pane layout (map, grammar, CLI)
+- `pane-command.js` — full-width CLI with history and scrollback
+- `app.js` — orchestrator with tab-based pane focus cycling
+- Entry point: `sokodebug` CLI that loads grammar/board files
+
+### 4.2 Map Pane
+- One character per cell, type-based colors
+- Cursor navigation, focused cell highlighting, toroidal wrapping
+- Zoom toggle (local ↔ full board)
+- Player key forwarding (WASD etc.)
+
+### 4.3 Grammar Pane
+- Rule listing via `serializeRuleWithTypes`
+- Last-fired marker (▶) from trace buffer
+- Heat coloring by fire frequency (hot=red, cold=dim)
+- Scroll and auto-sync modes
+
+### 4.4 Commands
+- Simulation control: run/pause/step/speed/reset
+- Navigation: goto/center/player
+- Inspection: cell/neighbors/trace
+- Board editing: set/paint/clear/fill
+- State management: save/load/snapshot/restore
+- Debugging: watch/break/trace filtering
+
+## Phase 5: Trace-Based Undo & Time Travel
+
+Extend the existing trace system (`src/trace.js`) to support undo/redo and time-travel debugging.
+The debugger (Phase 4) is the primary consumer of these features.
+
+### 5.1 Snapshot Checkpoints
+- Periodic full board snapshots interleaved with trace events
+- Configurable checkpoint interval (e.g. every 500 trace events)
+- Enables rewinding to any point by restoring nearest checkpoint + replaying
+
+### 5.2 Undo/Redo
+- `undo [N]` command: rewind N events (restores from checkpoint + replay)
+- `redo [N]` command: replay N events forward
+- Undo player moves specifically: `undo move` skips back to previous move event
+
+### 5.3 Time Travel
+- `rewind T` — rewind to simulation time T
+- `replay` — replay from current point at configurable speed
+- `bookmark` — mark points of interest for quick navigation
+- Visual timeline in status bar showing position within trace
+
+## Phase 6: Web UI Improvements
+
+### 6.1 Game Selector ✅
+- Preset dropdown menu with Forest Fire, Sokoban, Ecosystem
+
+### 6.2 Improved Game Controls
 - Speed control slider
 - Step-by-step mode for debugging
+- Touch support for mobile
 
-### 4.3 Visual Polish
-- Better default icon mappings for common type names
-- Status bar with game info
+### 6.3 Visual Polish
 - Grammar syntax highlighting in editor
 - Error messages shown inline
+- Better default icon mappings for common type names
 
-## Phase 5: Future Directions (not yet planned in detail)
+## Phase 7: Future Directions (not yet planned in detail)
 
 - Reinforcement learning integration: gym-style environment wrapper
 - More game examples: snake, Conway's Life, maze generation, tower defense
-- Grammar debugger: step through rule matching, highlight matched cells
 - Serverless multiplayer revival (Lambda/DynamoDB backend)
 - Performance: WebAssembly engine, WebGL rendering for large boards
+- Socket mode: debugger connects to running websok instance via WebSocket
 
 ## Execution Order
 
-1. **Phase 1** first (testing) — establishes confidence in the engine
-2. **Phase 2** next (games) — demonstrates the framework's capabilities
-3. **Phase 3** alongside Phase 2 (docs) — document as we build
-4. **Phase 4** after games work (UI) — polish the experience
-5. **Phase 5** is aspirational — pursue as interest dictates
+1. **Phase 1** ✅ — testing established confidence in the engine
+2. **Phase 2** ✅ — example games demonstrate the framework
+3. **Phase 3** next — documentation makes the project approachable
+4. **Phase 4** after docs — terminal debugger for development and debugging
+5. **Phase 5** after debugger — trace-based undo gives debugger time-travel powers
+6. **Phase 6** — web UI polish
+7. **Phase 7** — aspirational, pursue as interest dictates
