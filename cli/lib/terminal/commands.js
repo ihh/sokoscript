@@ -50,6 +50,8 @@ export class CommandExecutor {
                 return this.load(args);
             case 'zoom': case 'z':
                 return this.zoom();
+            case 'undo':
+                return this.undo(args);
             case 'help': case '?':
                 return this.help(args);
             default:
@@ -213,9 +215,19 @@ export class CommandExecutor {
         return `Zoom: ${this.app.mapPane.zoom ? 'full board' : 'local'}`;
     }
 
+    undo(args) {
+        const n = parseInt(args[0]) || 1;
+        const ok = this.app.board.undo(n);
+        if (!ok) return 'Cannot undo: no snapshot available.';
+        this.app.mapPane.setBoard(this.app.board);
+        this.app.grammarPane.setBoard(this.app.board);
+        this.app.running = false;
+        return `Undone ${n} step(s). Board restored to nearest checkpoint.`;
+    }
+
     help() {
         return [
-            'Simulation:  run, pause, step [N], speed N, reset',
+            'Simulation:  run, pause, step [N], speed N, reset, undo [N]',
             'Navigation:  goto X,Y  center  player  zoom',
             'Inspection:  cell [X,Y]  neighbors [X,Y]  trace [N]',
             'Editing:     set TYPE [STATE]  setid ID  clear [X,Y]',

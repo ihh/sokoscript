@@ -412,7 +412,7 @@ class Board {
             });
         }
         this.trace = new TraceBuffer();
-        this.trace.push({ type: 'init', time: this.time.toString(), boardSize: this.size, grammar: this.grammarSource });
+        this.trace.push({ type: 'init', time: this.time.toString(), boardSize: this.size, grammar: this.grammarSource, boardJSON: this.toJSON() });
     }
 
     _traceApplyRule(category, x, y, dir, rule) {
@@ -435,6 +435,25 @@ class Board {
             ruleText: serializeRuleWithTypes(rule, this.grammar.types),
             subjectType: this.grammar.types[rule.lhs[0].type],
             before, after });
+
+        // Periodic snapshots for undo support
+        if (this.trace.needsSnapshot()) {
+            this.trace.pushSnapshot(this.toJSON());
+        }
+
+        return true;
+    }
+
+    undo(stepsBack = 1) {
+        const point = this.trace.findUndoPoint(stepsBack);
+        if (!point) return false;
+
+        // Restore board from snapshot
+        const boardJSON = point.snapshot.boardJSON;
+        this.initFromJSON(boardJSON);
+
+        // Truncate trace to discard undone events
+        this.trace.truncateTo(point.truncateAt);
         return true;
     }
 
