@@ -83,7 +83,7 @@ The four absolute directions are:
 - `>W>` -- west (left)
 
 ```
-// Fire only spreads northward
+// Fire only spreads southward (from the fire in the north to the tree in the south)
 tree >N> fire : fire fire, rate=3.
 ```
 
@@ -150,7 +150,7 @@ On the RHS, `$1` means "copy the first cell from the LHS, preserving its identit
 
 Because each cell has a hidden **ID**. When you write `$1`, the player cell keeps its ID as it moves. This matters for two reasons: the engine tracks which cell is the player (for camera following, highlighting, etc.), and it preserves any state the cell carries.
 
-If you wrote `_ player` on the RHS instead of `_ $1`, you'd create a brand-new player cell each move -- losing the original's identity and state.
+If you wrote `_ player` on the RHS instead of `_ $1`, you'd create a brand-new player cell each move -- losing the original's identity and state. Since identity is what allows the engine to know which cell the player controls, this would effectively turn your player into an NPC.
 
 ### Scoring
 
@@ -266,15 +266,15 @@ States use ASCII characters 33-126 (94 printable characters) to encode integers 
 When multiple types share the same behavior, you can avoid duplicating rules using **type inheritance**:
 
 ```
-// All three species move and die like a "bee"
-rock = bee.
-scissors = bee.
-paper = bee.
+// All three species move and die like a "drifter"
+rock = drifter.
+scissors = drifter.
+paper = drifter.
 
-// These rules apply to bee, rock, scissors, AND paper
-bee _ : $2 $1, rate=999.
-bee : _, rate=0.01.
-bee _ : $1 $1, rate=0.05.
+// These rules apply to drifter, rock, scissors, AND paper
+drifter _ : $2 $1, rate=999.
+drifter : _, rate=0.01.
+drifter _ : $1 $1, rate=0.05.
 
 // These rules are type-specific
 rock scissors : $1 $1, rate=999.
@@ -282,9 +282,9 @@ scissors paper : $1 $1, rate=999.
 paper rock : $1 $1, rate=999.
 ```
 
-The line `rock = bee.` means "rock inherits from bee." Every rule that mentions `bee` on the LHS is automatically expanded to also apply to `rock`. The same goes for `scissors` and `paper`.
+The line `rock = drifter.` means "rock inherits from drifter." Every rule that mentions `drifter` on the LHS is automatically expanded to also apply to `rock`. The same goes for `scissors` and `paper`.
 
-This is the rock-paper-scissors grammar. All three species wander (`bee _ : $2 $1`), die (`bee : _`), and reproduce (`bee _ : $1 $1`) at the same rates. But each one also beats one other species (`rock scissors : $1 $1` means rock replaces scissors).
+This is the rock-paper-scissors grammar. All three species wander (`drifter _ : $2 $1`), die (`drifter : _`), and reproduce (`drifter _ : $1 $1`) at the same rates. But each one also beats one other species (`rock scissors : $1 $1` means rock replaces scissors).
 
 A type can inherit from multiple parents:
 
