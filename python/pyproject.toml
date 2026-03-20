@@ -1,0 +1,33 @@
+[build-system]
+requires = ["setuptools>=68.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "sokoscript"
+version = "0.1.0"
+description = "Python/JAX engine for SokoScript grid-based games"
+requires-python = ">=3.10"
+dependencies = [
+    "numpy>=1.24",
+]
+
+[project.optional-dependencies]
+jax = [
+    "jax>=0.4.20",
+    "jaxlib>=0.4.20",
+]
+rl = [
+    "gymnasium>=0.29",
+    "stable-baselines3>=2.1",
+    "torch>=2.0",
+    "wandb",
+]
+dev = [
+    "pytest>=7.0",
+]
+
+[tool.setuptools.packages.find]
+where = ["."]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
