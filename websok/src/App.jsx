@@ -47,34 +47,34 @@ ash : grass, rate=0.05.
 water : grass, rate=0.3.
 
 // Fireman extinguishes adjacent fire (WASD, put out fire and score!)
-fireman >N> fire : fireman water, key={w} score=1.
-fireman >S> fire : fireman water, key={s} score=1.
-fireman >E> fire : fireman water, key={d} score=1.
-fireman >W> fire : fireman water, key={a} score=1.
+fireman >N> fire : $1 water, key={w} score=1.
+fireman >S> fire : $1 water, key={s} score=1.
+fireman >E> fire : $1 water, key={d} score=1.
+fireman >W> fire : $1 water, key={a} score=1.
 
 // Fireman movement on empty ground (WASD)
-fireman >N> _ : _ fireman, key={w}.
-fireman >S> _ : _ fireman, key={s}.
-fireman >E> _ : _ fireman, key={d}.
-fireman >W> _ : _ fireman, key={a}.
+fireman >N> _ : _ $1, key={w}.
+fireman >S> _ : _ $1, key={s}.
+fireman >E> _ : _ $1, key={d}.
+fireman >W> _ : _ $1, key={a}.
 
 // Fireman can walk over grass
-fireman >N> grass : _ fireman, key={w}.
-fireman >S> grass : _ fireman, key={s}.
-fireman >E> grass : _ fireman, key={d}.
-fireman >W> grass : _ fireman, key={a}.
+fireman >N> grass : _ $1, key={w}.
+fireman >S> grass : _ $1, key={s}.
+fireman >E> grass : _ $1, key={d}.
+fireman >W> grass : _ $1, key={a}.
 
 // Fireman can walk over ash
-fireman >N> ash : _ fireman, key={w}.
-fireman >S> ash : _ fireman, key={s}.
-fireman >E> ash : _ fireman, key={d}.
-fireman >W> ash : _ fireman, key={a}.
+fireman >N> ash : _ $1, key={w}.
+fireman >S> ash : _ $1, key={s}.
+fireman >E> ash : _ $1, key={d}.
+fireman >W> ash : _ $1, key={a}.
 
 // Fireman can walk over water
-fireman >N> water : _ fireman, key={w}.
-fireman >S> water : _ fireman, key={s}.
-fireman >E> water : _ fireman, key={d}.
-fireman >W> water : _ fireman, key={a}.
+fireman >N> water : _ $1, key={w}.
+fireman >S> water : _ $1, key={s}.
+fireman >E> water : _ $1, key={d}.
+fireman >W> water : _ $1, key={a}.
 `,
     size: 16,
     icons: {
@@ -100,28 +100,28 @@ fireman >W> water : _ fireman, key={a}.
 // Control the player with WASD. Push crates onto targets to score!
 
 // Player movement (WASD) - walk on empty ground or floor
-player >N> _ : _ player, key={w}.
-player >S> _ : _ player, key={s}.
-player >E> _ : _ player, key={d}.
-player >W> _ : _ player, key={a}.
+player >N> _ : _ $1, key={w}.
+player >S> _ : _ $1, key={s}.
+player >E> _ : _ $1, key={d}.
+player >W> _ : _ $1, key={a}.
 
 // Player walks onto target (target stays, shown via player state)
-player >N> target : _ player, key={w}.
-player >S> target : _ player, key={s}.
-player >E> target : _ player, key={d}.
-player >W> target : _ player, key={a}.
+player >N> target : _ $1, key={w}.
+player >S> target : _ $1, key={s}.
+player >E> target : _ $1, key={d}.
+player >W> target : _ $1, key={a}.
 
 // Player pushes crate onto empty space
-player >N> crate >N> _ : _ player crate, key={w}.
-player >S> crate >S> _ : _ player crate, key={s}.
-player >E> crate >E> _ : _ player crate, key={d}.
-player >W> crate >W> _ : _ player crate, key={a}.
+player >N> crate >N> _ : _ $1 crate, key={w}.
+player >S> crate >S> _ : _ $1 crate, key={s}.
+player >E> crate >E> _ : _ $1 crate, key={d}.
+player >W> crate >W> _ : _ $1 crate, key={a}.
 
 // Player pushes crate onto target (score!)
-player >N> crate >N> target : _ player goal, key={w} score=1.
-player >S> crate >S> target : _ player goal, key={s} score=1.
-player >E> crate >E> target : _ player goal, key={d} score=1.
-player >W> crate >W> target : _ player goal, key={a} score=1.
+player >N> crate >N> target : _ $1 goal, key={w} score=1.
+player >S> crate >S> target : _ $1 goal, key={s} score=1.
+player >E> crate >E> target : _ $1 goal, key={d} score=1.
+player >W> crate >W> target : _ $1 goal, key={a} score=1.
 `,
     size: 16,
     icons: {

@@ -102,9 +102,9 @@ class Matcher {
 
     computeAddr (addr, baseVec) {
       switch (addr.op) {
-        case 'absolute':
-            return lookups.charVecLookup[lookups.charPermLookup.vecAdd[lookups.absDir[t.dir]][lookups.vec2char(baseVec)]];
-        case 'relative':
+        case 'absdir':
+            return lookups.charVecLookup[lookups.charPermLookup.vecAdd[lookups.charLookup.absDir[addr.dir]][lookups.vec2char(baseVec)]];
+        case 'reldir':
             return lookups.charVecLookup[lookups.charPermLookup.vecAdd[this.getRelativeDir(addr.dir)][lookups.vec2char(baseVec)]];
         case 'neighbor':
             return lookups.charVecLookup[lookups.charPermLookup.vecAdd[this.computeStateChar(addr.arg)][lookups.vec2char(baseVec)]];
@@ -121,7 +121,7 @@ class Matcher {
             if (pos === 0)
                 x = y = 0;
             else
-                [x,y] = this.computeAddr (term.dir || { op: 'relative', dir: 'F' }, this.termAddr[pos-1], pos);
+                [x,y] = this.computeAddr (term.addr || { op: 'relative', dir: 'F' }, this.termAddr[pos-1], pos);
             this.termAddr.push ([x,y]);
             const cell = this.board.getCell (x + this.x, y + this.y);
             const { type, state } = cell;

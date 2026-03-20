@@ -21,31 +21,31 @@ ash : grass, rate=0.05.
 water : grass, rate=0.3.
 
 // Fireman extinguishes adjacent fire (WASD, put out fire and score!)
-fireman >N> fire : fireman water, key={w} score=1.
-fireman >S> fire : fireman water, key={s} score=1.
-fireman >E> fire : fireman water, key={d} score=1.
-fireman >W> fire : fireman water, key={a} score=1.
+fireman >N> fire : $1 water, key={w} score=1.
+fireman >S> fire : $1 water, key={s} score=1.
+fireman >E> fire : $1 water, key={d} score=1.
+fireman >W> fire : $1 water, key={a} score=1.
 
 // Fireman movement on empty ground (WASD)
-fireman >N> _ : _ fireman, key={w}.
-fireman >S> _ : _ fireman, key={s}.
-fireman >E> _ : _ fireman, key={d}.
-fireman >W> _ : _ fireman, key={a}.
+fireman >N> _ : _ $1, key={w}.
+fireman >S> _ : _ $1, key={s}.
+fireman >E> _ : _ $1, key={d}.
+fireman >W> _ : _ $1, key={a}.
 
 // Fireman can walk over grass
-fireman >N> grass : _ fireman, key={w}.
-fireman >S> grass : _ fireman, key={s}.
-fireman >E> grass : _ fireman, key={d}.
-fireman >W> grass : _ fireman, key={a}.
+fireman >N> grass : _ $1, key={w}.
+fireman >S> grass : _ $1, key={s}.
+fireman >E> grass : _ $1, key={d}.
+fireman >W> grass : _ $1, key={a}.
 
 // Fireman can walk over ash
-fireman >N> ash : _ fireman, key={w}.
-fireman >S> ash : _ fireman, key={s}.
-fireman >E> ash : _ fireman, key={d}.
-fireman >W> ash : _ fireman, key={a}.
+fireman >N> ash : _ $1, key={w}.
+fireman >S> ash : _ $1, key={s}.
+fireman >E> ash : _ $1, key={d}.
+fireman >W> ash : _ $1, key={a}.
 
 // Fireman can walk over water
-fireman >N> water : _ fireman, key={w}.
-fireman >S> water : _ fireman, key={s}.
-fireman >E> water : _ fireman, key={d}.
-fireman >W> water : _ fireman, key={a}.
+fireman >N> water : _ $1, key={w}.
+fireman >S> water : _ $1, key={s}.
+fireman >E> water : _ $1, key={d}.
+fireman >W> water : _ $1, key={a}.
