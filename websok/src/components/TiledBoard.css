@@ -12,8 +12,16 @@
     line-height: 1;
 }
 
+.TiledBoardInner .tileRow > * {
+    width: 1em;
+    height: 1em;
+    flex-shrink: 0;
+    flex-grow: 0;
+}
+
 .TiledBoardInner .tileRow svg.hover {
     border-style: solid;
     border-width: 1px;
     margin: -1px;
+    box-sizing: content-box;
 }

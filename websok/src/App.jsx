@@ -1,5 +1,4 @@
 import { useState, useCallback } from 'react';
-import Textarea from 'rc-textarea';
 import Input from 'rc-input';
 import DebounceInput from 'react-debounce-input';
 import { Icon } from '@iconify/react';
@@ -17,6 +16,7 @@ import PixelMap from './components/PixelMap.jsx';
 import Tile from './components/Tile.jsx';
 import BoardSizeSelector from './components/BoardSizeSelector.jsx';
 import ScoreDisplay from './components/ScoreDisplay.jsx';
+import GrammarEditor from './components/GrammarEditor.jsx';
 
 import './App.css';
 
@@ -621,7 +621,7 @@ return (
 
 <div className="GrammarSection">
   <div className="section-header">Grammar</div>
-  <DebounceInput element={Textarea} debounceTimeout={500} cols={80} autoSize value={grammarText} onChange={onGrammarTextChange}/>
+  <GrammarEditor value={grammarText} onChange={onGrammarTextChange}/>
   {errorMessage ? <div className="ErrorMessage">{errorMessage}</div> : ''}
 </div>
 
@@ -634,10 +634,9 @@ return (
     a.click();
   }}>Export</button>
   <button onClick={()=>{
-    const trace = board.trace.toJSON();
-    trace.grammar = board.grammarSource;
-    trace.boardSize = board.size;
-    navigator.clipboard.writeText(JSON.stringify(trace, null, 2));
+    const all = board.trace.toArray();
+    const replacer = (k, v) => typeof v === 'bigint' ? v.toString() : v;
+    navigator.clipboard.writeText(JSON.stringify(all, replacer, 2));
   }}>Copy Trace</button>
   <input type="file" onChange={(evt)=>setImportFile(evt.target.files[0])}/>
   {importFile ? (<button onClick={()=>{

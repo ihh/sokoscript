@@ -257,7 +257,7 @@ class Board {
                 const cell = this.cell[index];
                 if (typeof(cell.owner) === 'undefined' || user === cell.owner || user === Board.owner) {
                     const rules = command ? this.grammar.command[cell.type][command] : this.grammar.key[cell.type][key];
-                    rules.reduce ((success, rule) => success || this._traceApplyRule ('move', x, y, dir, rule), false);
+                    rules.reduce ((success, rule) => success || this._traceApplyRule ('move', x, y, dir, rule, move), false);
                 }
             }
         } else if (move.type === 'write') {
@@ -415,7 +415,7 @@ class Board {
         this.trace.push({ type: 'init', time: this.time.toString(), boardSize: this.size, grammar: this.grammarSource, boardJSON: this.toJSON() });
     }
 
-    _traceApplyRule(category, x, y, dir, rule) {
+    _traceApplyRule(category, x, y, dir, rule, move) {
         const updates = transformRuleUpdate(this, x, y, dir, rule);
         if (!updates) return false;
 
@@ -431,10 +431,12 @@ class Board {
             return { x: ux, y: uy, type: this.grammar.types[cell.type], state: cell.state };
         });
 
-        this.trace.push({ type: category, time: this.time.toString(), x, y, dir,
+        const entry = { type: category, time: this.time.toString(), x, y, dir,
             ruleText: serializeRuleWithTypes(rule, this.grammar.types),
             subjectType: this.grammar.types[rule.lhs[0].type],
-            before, after });
+            before, after };
+        if (move) entry.move = move;
+        this.trace.push(entry);
 
         // Periodic snapshots for undo support
         if (this.trace.needsSnapshot()) {
@@ -442,6 +444,28 @@ class Board {
         }
 
         return true;
+    }
+
+    replayLog() {
+        const all = this.trace.toArray();
+        const init = all.find(e => e.type === 'init');
+        if (!init) return null;
+        const moves = all.filter(e => e.move).map(e => e.move);
+        const finalTime = this.time.toString();
+        return { initBoardJSON: init.boardJSON, moves, finalTime };
+    }
+
+    static replay(log) {
+        const board = new Board(log.initBoardJSON);
+        const finalTime = BigInt(log.finalTime);
+        const moves = log.moves.map(m => ({...m, time: BigInt(m.time)}))
+            .toSorted((a, b) => a.time > b.time ? 1 : a.time < b.time ? -1 : 0);
+        for (const move of moves) {
+            board.evolveToTime(move.time, true);
+            board.processMove(move);
+        }
+        board.evolveToTime(finalTime, true);
+        return board;
     }
 
     undo(stepsBack = 1) {

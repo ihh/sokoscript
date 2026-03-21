@@ -16,7 +16,9 @@ export default function Tile(props) {
     let color = icon?.color || icon?.defaultColor;
     if (!(color in csscolors))
         color = icon?.defaultColor;
-    let tileStyle = { ...style || {}, borderColor: focusColor };
+    let tileStyle = { ...style || {} };
+    if (hover)
+        tileStyle.borderColor = focusColor;
     if (icon?.rotate && state?.length > 0)
         tileStyle.transform = 'rotate(' + (charRotLookup[state.charAt(0)] || 0) + 'deg)';
     if (meta?.id)

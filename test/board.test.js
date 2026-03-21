@@ -200,4 +200,102 @@ describe ('Testing the Board', () => {
         expect(board.byType[aTypeIdx].total()).to.equal(1);
         expect(board.byType[0].total()).to.equal(14);
     });
+
+    it ('Trace replay reproduces exact board state', () => {
+        // Grammar with both async rules and player-controlled key rules
+        const grammar = [
+            'bee _ : _ bee, rate=10.',
+            'player >N> _ : _ $1, key={w}.',
+            'player >S> _ : _ $1, key={s}.',
+            'player >E> _ : _ $1, key={d}.',
+            'player >W> _ : _ $1, key={a}.',
+        ].join('\n');
+        const board = new Board({ size: 8, seed: 42, grammar });
+        board.setCellTypeByName(4, 4, 'player', '', { id: 'p1' });
+        board.setCellTypeByName(1, 1, 'bee');
+        board.setCellTypeByName(6, 6, 'bee');
+        board.setCellTypeByName(3, 5, 'bee');
+
+        // Re-init to capture the placed cells in the init trace entry
+        board.updateGrammar(grammar);
+
+        const sec = 1n << 32n;
+
+        // Simulate player moves at specific times, interleaved with async evolution
+        const moves = [
+            { type: 'command', time: sec / 2n,     id: 'p1', dir: 'N', key: 'w' },
+            { type: 'command', time: sec,           id: 'p1', dir: 'E', key: 'd' },
+            { type: 'command', time: sec * 3n / 2n, id: 'p1', dir: 'E', key: 'd' },
+            { type: 'command', time: sec * 2n,      id: 'p1', dir: 'S', key: 's' },
+        ];
+
+        for (const move of moves) {
+            board.evolveToTime(move.time, true);
+            board.processMove(move);
+        }
+        const finalTime = sec * 3n;
+        board.evolveToTime(finalTime, true);
+
+        // Extract replay log
+        const log = board.replayLog();
+        expect(log).to.not.be.null;
+        expect(log.moves).to.have.length(4);
+
+        // Replay on a fresh board
+        const replayed = Board.replay(log);
+
+        // Verify exact match
+        expect(replayed.toJSON().cell).to.deep.equal(board.toJSON().cell);
+        expect(replayed.time).to.equal(board.time);
+        expect(replayed.rng.mt).to.deep.equal(board.rng.mt);
+    });
+
+    it ('Trace replay with no player moves (pure async)', () => {
+        const grammar = 'bee _ : _ bee, rate=50.';
+        const board = new Board({ size: 4, seed: 123, grammar });
+        board.setCellTypeByName(2, 2, 'bee');
+        board.setCellTypeByName(0, 3, 'bee');
+        board.updateGrammar(grammar);
+
+        const finalTime = 2n << 32n;
+        board.evolveToTime(finalTime, true);
+
+        const log = board.replayLog();
+        expect(log.moves).to.have.length(0);
+
+        const replayed = Board.replay(log);
+        expect(replayed.toJSON().cell).to.deep.equal(board.toJSON().cell);
+        expect(replayed.time).to.equal(board.time);
+    });
+
+    it ('Trace replay with sync rules and player moves', () => {
+        const grammar = [
+            'bee : ant, sync=2.',
+            'player >N> _ : _ $1, key={w}.',
+        ].join('\n');
+        const board = new Board({ size: 4, seed: 99, grammar });
+        board.setCellTypeByName(2, 2, 'player', '', { id: 'p1' });
+        board.setCellTypeByName(0, 0, 'bee');
+        board.setCellTypeByName(3, 3, 'bee');
+        board.updateGrammar(grammar);
+
+        const sec = 1n << 32n;
+        const moves = [
+            { type: 'command', time: sec / 4n, id: 'p1', dir: 'N', key: 'w' },
+            { type: 'command', time: sec * 3n / 4n, id: 'p1', dir: 'N', key: 'w' },
+        ];
+
+        for (const move of moves) {
+            board.evolveToTime(move.time, true);
+            board.processMove(move);
+        }
+        const finalTime = sec * 2n;
+        board.evolveToTime(finalTime, true);
+
+        const log = board.replayLog();
+        const replayed = Board.replay(log);
+        expect(replayed.toJSON().cell).to.deep.equal(board.toJSON().cell);
+        expect(replayed.time).to.equal(board.time);
+        expect(replayed.rng.mt).to.deep.equal(board.rng.mt);
+    });
 });
