@@ -26,7 +26,7 @@ export class TerminalApp {
         this.executor = new CommandExecutor(this);
         this.commandPane.onCommand = (cmd) => this.executor.execute(cmd);
 
-        this.activePane = 'command';
+        this.activePane = 'map';
 
         this.running = false;
         this.speed = 1;

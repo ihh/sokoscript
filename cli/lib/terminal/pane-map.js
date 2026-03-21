@@ -119,7 +119,7 @@ export class MapPane {
                     const hasId = cell.meta && cell.meta.id;
 
                     if (isFocus) {
-                        out += inverse + fgRGB(cr, cg, cb) + ch + reset;
+                        out += bgRGB(255, 255, 255) + fgRGB(0, 0, 0) + bold + ch + reset;
                     } else if (hasId) {
                         out += bold + underline + fgRGB(cr, cg, cb) + ch + reset;
                     } else {

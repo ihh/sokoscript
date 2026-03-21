@@ -2,6 +2,8 @@
 
 import { serializeRuleWithTypes } from '../../../src/serialize.js';
 import { readFileSync, writeFileSync } from 'fs';
+import { Board } from '../../../src/board.js';
+import presets from '../../../presets/index.js';
 
 export class CommandExecutor {
     constructor(app) {
@@ -52,6 +54,10 @@ export class CommandExecutor {
                 return this.zoom();
             case 'undo':
                 return this.undo(args);
+            case 'preset':
+                return this.preset(args);
+            case 'presets':
+                return this.listPresets();
             case 'help': case '?':
                 return this.help(args);
             default:
@@ -225,6 +231,41 @@ export class CommandExecutor {
         return `Undone ${n} step(s). Board restored to nearest checkpoint.`;
     }
 
+    preset(args) {
+        if (args.length < 1) return this.listPresets();
+        const name = args.join(' ');
+        return this.loadPreset(name);
+    }
+
+    listPresets() {
+        const names = Object.keys(presets);
+        return 'Presets: ' + names.join(', ');
+    }
+
+    loadPreset(name) {
+        // Try exact match first, then case-insensitive
+        let preset = presets[name];
+        if (!preset) {
+            const lower = name.toLowerCase();
+            const key = Object.keys(presets).find(k => k.toLowerCase() === lower);
+            if (key) preset = presets[key];
+        }
+        if (!preset) return `Unknown preset: ${name}. Type "presets" to list.`;
+
+        const newBoard = new Board({ size: preset.size, grammar: preset.grammar });
+        if (preset.setup) preset.setup(newBoard);
+
+        this.app.board = newBoard;
+        this.app.initialBoardJSON = newBoard.toJSON();
+        this.app.mapPane.setBoard(newBoard);
+        this.app.grammarPane.setBoard(newBoard);
+        this.app.totalEvents = 0;
+        this.app.running = false;
+        this.app.rebuildPlayerKeys();
+        this.app.mapPane.centerOnPlayer(this.app.playerId);
+        return `Loaded preset: ${preset.name}`;
+    }
+
     help() {
         return [
             'Simulation:  run, pause, step [N], speed N, reset, undo [N]',
@@ -232,10 +273,10 @@ export class CommandExecutor {
             'Inspection:  cell [X,Y]  neighbors [X,Y]  trace [N]',
             'Editing:     set TYPE [STATE]  setid ID  clear [X,Y]',
             'Grammar:     grammar',
+            'Presets:     preset NAME  presets (list)',
             'Files:       save FILE  load FILE',
             'Keys:        Tab=focus  Space=run/pause  n=step  z=zoom',
             '             Arrows=move  Shift+Arrows=move fast  Home=player',
-            '             WASD=player controls (in map pane)',
         ].join('\n');
     }
 }

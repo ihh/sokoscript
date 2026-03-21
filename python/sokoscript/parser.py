@@ -280,7 +280,8 @@ class Parser:
             attrs = self.parse_attributes()
             dupes = self._count_duplicate_attributes(attrs)
             if dupes:
-                self.error(f"Duplicate attribute: {', '.join('\"' + d + '\"' for d in dupes)}")
+                dupe_list = ', '.join('"' + d + '"' for d in dupes)
+                self.error(f"Duplicate attribute: {dupe_list}")
             if not self._validate_attributes(attrs):
                 self.error("sync and rate are mutually exclusive")
             merged = {}
