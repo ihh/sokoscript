@@ -239,11 +239,17 @@ class RuleRevealAction(gym.Wrapper):
         return full_highlight[np.ix_(rows, cols)]
 
     def _augment_obs(self, obs):
+        # obs may have more channels than inner_c if other wrappers added channels
+        obs_h, obs_w = obs.shape[0], obs.shape[1]
         if self._highlight is not None:
             h = self._window_highlight(self._highlight)
+            # Ensure highlight matches obs spatial dims
+            if h.shape[0] != obs_h or h.shape[1] != obs_w:
+                h = h[:obs_h, :obs_w] if h.shape[0] >= obs_h else np.pad(
+                    h, ((0, obs_h - h.shape[0]), (0, obs_w - h.shape[1])))
             self._highlight = None  # One-shot
         else:
-            h = np.zeros((self.inner_h, self.inner_w), dtype=np.float32)
+            h = np.zeros((obs_h, obs_w), dtype=np.float32)
         return np.concatenate([obs, h[:, :, np.newaxis]], axis=2)
 
     def reset(self, **kwargs):
