@@ -412,7 +412,9 @@ class Board {
             });
         }
         this.trace = new TraceBuffer();
-        this.trace.push({ type: 'init', time: this.time.toString(), boardSize: this.size, grammar: this.grammarSource, boardJSON: this.toJSON() });
+        this.traceInit = { type: 'init', time: this.time.toString(), boardSize: this.size, grammar: this.grammarSource, boardJSON: this.toJSON() };
+        this.traceMoves = [];
+        this.trace.push(this.traceInit);
     }
 
     _traceApplyRule(category, x, y, dir, rule, move) {
@@ -435,7 +437,10 @@ class Board {
             ruleText: serializeRuleWithTypes(rule, this.grammar.types),
             subjectType: this.grammar.types[rule.lhs[0].type],
             before, after };
-        if (move) entry.move = move;
+        if (move) {
+            entry.move = move;
+            this.traceMoves.push(move);
+        }
         this.trace.push(entry);
 
         // Periodic snapshots for undo support
@@ -447,12 +452,9 @@ class Board {
     }
 
     replayLog() {
-        const all = this.trace.toArray();
-        const init = all.find(e => e.type === 'init');
-        if (!init) return null;
-        const moves = all.filter(e => e.move).map(e => e.move);
+        if (!this.traceInit) return null;
         const finalTime = this.time.toString();
-        return { initBoardJSON: init.boardJSON, moves, finalTime };
+        return { initBoardJSON: this.traceInit.boardJSON, moves: this.traceMoves, finalTime };
     }
 
     static replay(log) {
@@ -474,7 +476,13 @@ class Board {
 
         // Restore board from snapshot
         const boardJSON = point.snapshot.boardJSON;
+        const savedInit = this.traceInit;
+        const savedMoves = this.traceMoves;
         this.initFromJSON(boardJSON);
+        // initFromJSON resets traceInit/traceMoves; restore originals, trimmed to undo point
+        this.traceInit = savedInit;
+        const undoTime = BigInt(boardJSON.time);
+        this.traceMoves = savedMoves.filter(m => BigInt(m.time) <= undoTime);
 
         // Truncate trace to discard undone events
         this.trace.truncateTo(point.truncateAt);

@@ -298,4 +298,49 @@ describe ('Testing the Board', () => {
         expect(replayed.time).to.equal(board.time);
         expect(replayed.rng.mt).to.deep.equal(board.rng.mt);
     });
+
+    it ('Replay log size is O(player input), not O(total events)', () => {
+        // High-rate async rule generates many events; only player moves matter for replay
+        const grammar = [
+            'bee _ : _ bee, rate=100.',
+            'player >N> _ : _ $1, key={w}.',
+            'player >S> _ : _ $1, key={s}.',
+            'player >E> _ : _ $1, key={d}.',
+            'player >W> _ : _ $1, key={a}.',
+        ].join('\n');
+        const board = new Board({ size: 8, seed: 42, grammar });
+        board.setCellTypeByName(4, 4, 'player', '', { id: 'p1' });
+        for (let i = 0; i < 10; i++)
+            board.setCellTypeByName(i % 8, Math.floor(i / 8), 'bee');
+        board.updateGrammar(grammar);
+
+        const sec = 1n << 32n;
+        const playerMoves = [
+            { type: 'command', time: sec,       id: 'p1', dir: 'N', key: 'w' },
+            { type: 'command', time: sec * 2n,   id: 'p1', dir: 'E', key: 'd' },
+            { type: 'command', time: sec * 3n,   id: 'p1', dir: 'S', key: 's' },
+        ];
+
+        for (const move of playerMoves) {
+            board.evolveToTime(move.time, true);
+            board.processMove(move);
+        }
+        board.evolveToTime(sec * 4n, true);
+
+        // Full trace has many async events
+        const allEvents = board.trace.toArray();
+        const asyncCount = allEvents.filter(e => e.type === 'async').length;
+        expect(asyncCount).to.be.greaterThan(50); // many async events fired
+
+        // Replay log only has player moves
+        const log = board.replayLog();
+        expect(log.moves).to.have.length(3); // exactly 3 player inputs
+        expect(log.moves.length).to.be.lessThan(asyncCount / 10);
+
+        // And it replays exactly
+        const replayed = Board.replay(log);
+        expect(replayed.toJSON().cell).to.deep.equal(board.toJSON().cell);
+        expect(replayed.time).to.equal(board.time);
+        expect(replayed.rng.mt).to.deep.equal(board.rng.mt);
+    });
 });
