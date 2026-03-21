@@ -1,0 +1,32 @@
+// Plague Doctor — cure the sick before the plague consumes everyone!
+// Move with WASD. Walk into sick villagers to cure them (score).
+
+// Infection spreads between adjacent villagers
+healthy >N> sick : sick sick, rate=0.3.
+healthy >S> sick : sick sick, rate=0.3.
+healthy >E> sick : sick sick, rate=0.3.
+healthy >W> sick : sick sick, rate=0.3.
+
+// Sick villagers die
+sick : corpse, rate=0.1.
+
+// Corpses become impassable graves
+corpse : grave, rate=0.2.
+
+// Player cures sick villagers — score
+player >N> sick : $1 healthy, key={w} score=1.
+player >S> sick : $1 healthy, key={s} score=1.
+player >E> sick : $1 healthy, key={d} score=1.
+player >W> sick : $1 healthy, key={a} score=1.
+
+// Player movement on ground
+player >N> ground : ground $1, key={w}.
+player >S> ground : ground $1, key={s}.
+player >E> ground : ground $1, key={d}.
+player >W> ground : ground $1, key={a}.
+
+// Player can walk over healthy villagers (pass through crowds)
+player >N> healthy : healthy $1, key={w}.
+player >S> healthy : healthy $1, key={s}.
+player >E> healthy : healthy $1, key={d}.
+player >W> healthy : healthy $1, key={a}.

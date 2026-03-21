@@ -1,0 +1,26 @@
+// Treasure Miner — dig for gems, avoid falling rocks!
+// Move with WASD. Dig through dirt to find gems. Rocks fall down.
+
+// Player digs dirt (converts to tunnel)
+player >N> dirt : ground $1, key={w}.
+player >S> dirt : ground $1, key={s}.
+player >E> dirt : ground $1, key={d}.
+player >W> dirt : ground $1, key={a}.
+
+// Player digs into gem — score!
+player >N> gem : ground $1, key={w} score=1.
+player >S> gem : ground $1, key={s} score=1.
+player >E> gem : ground $1, key={d} score=1.
+player >W> gem : ground $1, key={a} score=1.
+
+// Player movement on ground (tunnels)
+player >N> ground : ground $1, key={w}.
+player >S> ground : ground $1, key={s}.
+player >E> ground : ground $1, key={d}.
+player >W> ground : ground $1, key={a}.
+
+// Gravity: rocks fall into empty space below
+rock >S> ground : ground rock, rate=50.
+
+// Falling rock crushes player
+rock >S> player : ground rock, rate=50.

@@ -1,0 +1,30 @@
+// Key and Door — find the key, then unlock the door!
+// Move with WASD. Pick up the key, then open the door for score.
+
+// Wall is an obstacle (identity rule to register the type)
+wall : wall, rate=0.
+
+// Player picks up key (gains key state, $1/k preserves player ID)
+player >N> key : ground $1/k, key={w}.
+player >S> key : ground $1/k, key={s}.
+player >E> key : ground $1/k, key={d}.
+player >W> key : ground $1/k, key={a}.
+
+// Player with key opens door — score! ($1 preserves player ID)
+player/k >N> door : ground $1, key={w} score=10.
+player/k >S> door : ground $1, key={s} score=10.
+player/k >E> door : ground $1, key={d} score=10.
+player/k >W> door : ground $1, key={a} score=10.
+
+// Player without key is blocked by door (no rule fires — just movement rules)
+
+// Player movement on ground (any state)
+player >N> ground : ground $1, key={w}.
+player >S> ground : ground $1, key={s}.
+player >E> ground : ground $1, key={d}.
+player >W> ground : ground $1, key={a}.
+
+player/k >N> ground : ground $1, key={w}.
+player/k >S> ground : ground $1, key={s}.
+player/k >E> ground : ground $1, key={d}.
+player/k >W> ground : ground $1, key={a}.

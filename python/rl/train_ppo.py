@@ -55,9 +55,226 @@ def make_forest_fire_env(board_size=16, seed=None):
     )
 
 
+def make_apple_collector_env(board_size=16, seed=None):
+    """Create an apple collector environment."""
+    from sokoscript.env import SokoScriptEnv
+
+    grammars_dir = os.path.join(os.path.dirname(__file__), '..', '..', 'grammars')
+    with open(os.path.join(grammars_dir, 'apple_collector.txt')) as f:
+        grammar = f.read()
+
+    def init_fn(board):
+        for y in range(board.size):
+            for x in range(board.size):
+                board.set_cell_type_by_name(x, y, 'ground')
+        board.set_cell_type_by_name(
+            board.size // 2, board.size // 2,
+            'player', '', {'id': 'p1'}
+        )
+
+    return SokoScriptEnv(
+        grammar=grammar,
+        board_size=board_size,
+        player_id='p1',
+        dt=0.1,
+        max_steps=500,
+        board_init_fn=init_fn,
+        score_reward_scale=1.0,
+        time_penalty=0.001,
+        seed=seed,
+    )
+
+
+def make_predator_prey_env(board_size=16, seed=None, n_predators=3):
+    """Create a predator-prey environment."""
+    from sokoscript.env import SokoScriptEnv
+
+    grammars_dir = os.path.join(os.path.dirname(__file__), '..', '..', 'grammars')
+    with open(os.path.join(grammars_dir, 'predator_prey.txt')) as f:
+        grammar = f.read()
+
+    def init_fn(board):
+        import random
+        rng = random.Random(seed)
+        for y in range(board.size):
+            for x in range(board.size):
+                board.set_cell_type_by_name(x, y, 'ground')
+        board.set_cell_type_by_name(
+            board.size // 2, board.size // 2,
+            'player', '', {'id': 'p1'}
+        )
+        # Place predators at edges
+        edge_positions = [
+            (0, 0), (board.size - 1, 0),
+            (0, board.size - 1), (board.size - 1, board.size - 1),
+            (board.size // 2, 0), (0, board.size // 2),
+        ]
+        rng.shuffle(edge_positions)
+        for i in range(min(n_predators, len(edge_positions))):
+            x, y = edge_positions[i]
+            board.set_cell_type_by_name(x, y, 'predator')
+
+    return SokoScriptEnv(
+        grammar=grammar,
+        board_size=board_size,
+        player_id='p1',
+        dt=0.1,
+        max_steps=500,
+        board_init_fn=init_fn,
+        score_reward_scale=1.0,
+        time_penalty=0.001,
+        seed=seed,
+    )
+
+
+def make_plague_doctor_env(board_size=16, seed=None, n_sick=3):
+    """Create a plague doctor environment."""
+    from sokoscript.env import SokoScriptEnv
+
+    grammars_dir = os.path.join(os.path.dirname(__file__), '..', '..', 'grammars')
+    with open(os.path.join(grammars_dir, 'plague_doctor.txt')) as f:
+        grammar = f.read()
+
+    def init_fn(board):
+        import random
+        rng = random.Random(seed)
+        # Fill with healthy villagers
+        for y in range(board.size):
+            for x in range(board.size):
+                board.set_cell_type_by_name(x, y, 'healthy')
+        # Place player in center
+        board.set_cell_type_by_name(
+            board.size // 2, board.size // 2,
+            'player', '', {'id': 'p1'}
+        )
+        # Place initial sick at edges
+        edge_positions = [
+            (0, 0), (board.size - 1, board.size - 1),
+            (board.size - 1, 0), (0, board.size - 1),
+        ]
+        rng.shuffle(edge_positions)
+        for i in range(min(n_sick, len(edge_positions))):
+            x, y = edge_positions[i]
+            board.set_cell_type_by_name(x, y, 'sick')
+
+    return SokoScriptEnv(
+        grammar=grammar,
+        board_size=board_size,
+        player_id='p1',
+        dt=0.2,
+        max_steps=500,
+        board_init_fn=init_fn,
+        score_reward_scale=1.0,
+        time_penalty=0.001,
+        seed=seed,
+    )
+
+
+def make_key_door_env(board_size=8, seed=None):
+    """Create a key-and-door environment."""
+    from sokoscript.env import SokoScriptEnv
+
+    grammars_dir = os.path.join(os.path.dirname(__file__), '..', '..', 'grammars')
+    with open(os.path.join(grammars_dir, 'key_door.txt')) as f:
+        grammar = f.read()
+
+    def init_fn(board):
+        import random
+        rng = random.Random(seed)
+        for y in range(board.size):
+            for x in range(board.size):
+                board.set_cell_type_by_name(x, y, 'ground')
+        # Wall row with gap
+        for x in range(board.size):
+            board.set_cell_type_by_name(x, 3, 'wall')
+        gap_x = rng.randint(1, board.size - 2)
+        board.set_cell_type_by_name(gap_x, 3, 'ground')
+        # Key in upper half, door in lower half
+        key_x = rng.randint(0, board.size - 1)
+        key_y = rng.randint(0, 2)
+        board.set_cell_type_by_name(key_x, key_y, 'key')
+        door_x = rng.randint(0, board.size - 1)
+        door_y = rng.randint(4, board.size - 1)
+        board.set_cell_type_by_name(door_x, door_y, 'door')
+        # Player in lower half
+        px = rng.randint(0, board.size - 1)
+        py = rng.randint(4, board.size - 1)
+        while (px, py) == (door_x, door_y):
+            px = rng.randint(0, board.size - 1)
+        board.set_cell_type_by_name(px, py, 'player', '', {'id': 'p1'})
+
+    return SokoScriptEnv(
+        grammar=grammar,
+        board_size=board_size,
+        player_id='p1',
+        dt=0.1,
+        max_steps=200,
+        board_init_fn=init_fn,
+        score_reward_scale=10.0,
+        time_penalty=0.01,
+        seed=seed,
+    )
+
+
+def make_treasure_miner_env(board_size=16, seed=None):
+    """Create a treasure miner environment."""
+    from sokoscript.env import SokoScriptEnv
+
+    grammars_dir = os.path.join(os.path.dirname(__file__), '..', '..', 'grammars')
+    with open(os.path.join(grammars_dir, 'treasure_miner.txt')) as f:
+        grammar = f.read()
+
+    def init_fn(board):
+        import random
+        rng = random.Random(seed)
+        # Fill with dirt
+        for y in range(board.size):
+            for x in range(board.size):
+                board.set_cell_type_by_name(x, y, 'dirt')
+        # Rock layer at top (rows 0-2)
+        for y in range(3):
+            for x in range(board.size):
+                board.set_cell_type_by_name(x, y, 'rock')
+        # Scatter gems in dirt
+        n_gems = max(board.size, 8)
+        placed = 0
+        while placed < n_gems:
+            gx = rng.randint(0, board.size - 1)
+            gy = rng.randint(3, board.size - 1)
+            board.set_cell_type_by_name(gx, gy, 'gem')
+            placed += 1
+        # Player at bottom with clear starting area
+        px = board.size // 2
+        py = board.size - 1
+        board.set_cell_type_by_name(px, py, 'player', '', {'id': 'p1'})
+        board.set_cell_type_by_name(px, py - 1, 'ground')
+
+    return SokoScriptEnv(
+        grammar=grammar,
+        board_size=board_size,
+        player_id='p1',
+        dt=0.05,
+        max_steps=500,
+        board_init_fn=init_fn,
+        score_reward_scale=1.0,
+        time_penalty=0.001,
+        seed=seed,
+    )
+
+
 def make_env(game, board_size=16, seed=None):
     if game == 'forest_fire':
         return make_forest_fire_env(board_size, seed)
+    if game == 'apple_collector':
+        return make_apple_collector_env(board_size, seed)
+    if game == 'predator_prey':
+        return make_predator_prey_env(board_size, seed)
+    if game == 'plague_doctor':
+        return make_plague_doctor_env(board_size, seed)
+    if game == 'key_door':
+        return make_key_door_env(board_size if board_size != 16 else 8, seed)
+    if game == 'treasure_miner':
+        return make_treasure_miner_env(board_size, seed)
     raise ValueError(f"Unknown game: {game}")
 
 
