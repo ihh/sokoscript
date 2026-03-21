@@ -19,19 +19,44 @@ import numpy as np
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 
-def make_env_with_obs(game, board_size, seed, window_size=None):
-    """Create env, optionally wrapped with local observation."""
+PLAYER_TYPES = {
+    'apple_collector': 'player',
+    'predator_prey': 'player',
+    'forest_fire': 'fireman',
+    'treasure_miner': 'player',
+    'key_door': 'player',
+    'plague_doctor': 'player',
+}
+
+
+def make_env_with_obs(game, board_size, seed, window_size=None,
+                      masked=False, look_penalty_dt=0.2):
+    """Create env, optionally wrapped with local observation.
+
+    Args:
+        window_size: If set, crop observation to this size (must be odd).
+        masked: If True, use MaskedLocalObsWrapper with look action.
+            The observation is (2*window-1)x(2*window-1) with mask channel;
+            inner window_size is visible, outer ring is masked.
+            An extra 'look' action unmasks the full view for one step.
+        look_penalty_dt: Time cost of the look action (seconds of board
+            evolution without player input).
+    """
     from rl.train_ppo import make_env
     env = make_env(game, board_size, seed)
+    player_type = PLAYER_TYPES.get(game, 'player')
     if window_size is not None:
-        from rl.local_obs import LocalObsWrapper
-        player_type = {
-            'apple_collector': 'player',
-            'predator_prey': 'player',
-            'forest_fire': 'fireman',
-            'treasure_miner': 'player',
-        }.get(game, 'player')
-        env = LocalObsWrapper(env, window_size=window_size, player_type=player_type)
+        if masked:
+            from rl.local_obs import MaskedLocalObsWrapper
+            env = MaskedLocalObsWrapper(
+                env, window_size=window_size, player_type=player_type,
+                look_penalty_dt=look_penalty_dt,
+            )
+        else:
+            from rl.local_obs import LocalObsWrapper
+            env = LocalObsWrapper(
+                env, window_size=window_size, player_type=player_type,
+            )
     return env
 
 
