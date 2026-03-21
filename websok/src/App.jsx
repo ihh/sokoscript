@@ -237,6 +237,7 @@ export default function App() {
       stopTimer();
       const newBoard = new Board({ size: preset.size, grammar: preset.grammar });
       if (preset.setup) preset.setup(newBoard);
+      newBoard.updateGrammar(preset.grammar); // re-init trace with post-setup board state
       setBoard(board = newBoard);
       setGrammarText(preset.grammar);
       setErrorMessage(undefined);

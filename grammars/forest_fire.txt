@@ -49,3 +49,9 @@ fireman >N> water : _ $1, key={w}.
 fireman >S> water : _ $1, key={s}.
 fireman >E> water : _ $1, key={d}.
 fireman >W> water : _ $1, key={a}.
+
+// Fireman can walk through trees
+fireman >N> tree : _ $1, key={w}.
+fireman >S> tree : _ $1, key={s}.
+fireman >E> tree : _ $1, key={d}.
+fireman >W> tree : _ $1, key={a}.
