@@ -112,37 +112,23 @@ class BoardStatsAction(gym.Wrapper):
 
     def step(self, action):
         if action == self.survey_action:
-            # Survey: don't move, pay time, compute stats
+            # Survey: pre-evolve penalty time, then do a normal step through
+            # the full wrapper stack to get a properly-shaped observation.
             board = self.env
             while hasattr(board, 'env'):
                 board = board.env
 
-            target_time = board.board.time + self.penalty_ticks
-            board.board.evolve_to_time(target_time, True)
-            board.step_count += 1
+            # Pre-evolve the penalty time
+            board.board.evolve_to_time(
+                board.board.time + self.penalty_ticks, True)
 
-            new_score = board._get_score()
-            score_delta = new_score - board._last_score
-            reward = score_delta * board.score_reward_scale - board.time_penalty
-            board._last_score = new_score
-
-            terminated = board.board.by_id.get(board.player_id) is None
-            truncated = board.step_count >= board.max_steps
-
-            from sokoscript.env import _board_to_observation
-            full_obs = _board_to_observation(board.board, board.num_types)
-
-            # Recompute through any inner wrappers (e.g. LocalObs)
-            inner_env = self.env
-            if hasattr(inner_env, 'observation'):
-                obs = inner_env.observation(full_obs)
-            else:
-                obs = full_obs
+            # Normal step through inner wrappers (action 0 = move)
+            obs, reward, terminated, truncated, info = self.env.step(0)
 
             self._last_stats = self._compute_stats_channel(obs)
             self._stats_remaining = self.stats_duration
+            info['surveyed'] = True
 
-            info = {'score': new_score, 'step': board.step_count, 'surveyed': True}
             return self._augment_obs(obs), reward, terminated, truncated, info
         else:
             obs, reward, terminated, truncated, info = self.env.step(action)
@@ -259,35 +245,24 @@ class RuleRevealAction(gym.Wrapper):
 
     def step(self, action):
         if action == self.divine_action:
+            # Compute highlight BEFORE evolving (show what's about to happen)
+            self._highlight = self._compute_highlight()
+
+            # Use a regular move action (first action = 'a'/west) to go through
+            # the full wrapper stack, but first evolve extra time as penalty.
+            # We pick action 0 but the time penalty means the board evolves extra.
             board_env = self.env
             while hasattr(board_env, 'env'):
                 board_env = board_env.env
 
-            # Compute highlight BEFORE evolving (show what's about to happen)
-            self._highlight = self._compute_highlight()
+            # Pre-evolve the penalty time (on top of what the inner step will do)
+            board_env.board.evolve_to_time(
+                board_env.board.time + self.penalty_ticks, True)
 
-            # Pay time penalty
-            target_time = board_env.board.time + self.penalty_ticks
-            board_env.board.evolve_to_time(target_time, True)
-            board_env.step_count += 1
-
-            new_score = board_env._get_score()
-            score_delta = new_score - board_env._last_score
-            reward = score_delta * board_env.score_reward_scale - board_env.time_penalty
-            board_env._last_score = new_score
-
-            terminated = board_env.board.by_id.get(board_env.player_id) is None
-            truncated = board_env.step_count >= board_env.max_steps
-
-            from sokoscript.env import _board_to_observation
-            full_obs = _board_to_observation(board_env.board, board_env.num_types)
-            inner_env = self.env
-            if hasattr(inner_env, 'observation'):
-                obs = inner_env.observation(full_obs)
-            else:
-                obs = full_obs
-
-            info = {'score': new_score, 'step': board_env.step_count, 'divined': True}
+            # Now do a normal step through the full wrapper stack with action 0
+            # The player moves, but they already paid the time penalty
+            obs, reward, terminated, truncated, info = self.env.step(0)
+            info['divined'] = True
             return self._augment_obs(obs), reward, terminated, truncated, info
         else:
             obs, reward, terminated, truncated, info = self.env.step(action)
