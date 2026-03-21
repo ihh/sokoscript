@@ -1,0 +1,28 @@
+// Minefield — navigate to the exit without stepping on hidden mines!
+// Move with WASD. Mines are invisible (same type as ground until triggered).
+// Surveying reveals nearby mine density. Divine reveals the next mine that would detonate.
+// Reach the exit (score). Step on a mine and die.
+
+// Mine detonates when player steps on it (kills player)
+player >N> mine : ground explosion, key={w}.
+player >S> mine : ground explosion, key={s}.
+player >E> mine : ground explosion, key={d}.
+player >W> mine : ground explosion, key={a}.
+
+// Explosion fades
+explosion : ground, rate=5.
+
+// Player reaches exit — big score!
+player >N> exit : ground $1, key={w} score=100.
+player >S> exit : ground $1, key={s} score=100.
+player >E> exit : ground $1, key={d} score=100.
+player >W> exit : ground $1, key={a} score=100.
+
+// Player movement on ground
+player >N> ground : ground $1, key={w}.
+player >S> ground : ground $1, key={s}.
+player >E> ground : ground $1, key={d}.
+player >W> ground : ground $1, key={a}.
+
+// Safe cells glow faintly (hint type — visible but mines look like ground)
+safe : safe, rate=0.

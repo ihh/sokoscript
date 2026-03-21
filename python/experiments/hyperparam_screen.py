@@ -26,6 +26,8 @@ PLAYER_TYPES = {
     'treasure_miner': 'player',
     'key_door': 'player',
     'plague_doctor': 'player',
+    'minefield': 'player',
+    'scout': 'player',
 }
 
 

@@ -1,0 +1,31 @@
+// Scout — explore fog-of-war territory, find and collect treasures!
+// Move with WASD. The board is covered in fog. Moving reveals nearby cells.
+// Fog hides treasures, traps, and walls. Survey action reveals fog density.
+// Find treasures (score), avoid traps (damage/death).
+
+// Fog dissipates when player is adjacent (auto-reveal)
+fog >N> player : ground player, rate=20.
+fog >S> player : ground player, rate=20.
+fog >E> player : ground player, rate=20.
+fog >W> player : ground player, rate=20.
+
+// Player collects treasure — score!
+player >N> treasure : ground $1, key={w} score=5.
+player >S> treasure : ground $1, key={s} score=5.
+player >E> treasure : ground $1, key={d} score=5.
+player >W> treasure : ground $1, key={a} score=5.
+
+// Player hits trap — killed
+player >N> trap : ground trap, key={w}.
+player >S> trap : ground trap, key={s}.
+player >E> trap : ground trap, key={d}.
+player >W> trap : ground trap, key={a}.
+
+// Player movement on ground
+player >N> ground : ground $1, key={w}.
+player >S> ground : ground $1, key={s}.
+player >E> ground : ground $1, key={d}.
+player >W> ground : ground $1, key={a}.
+
+// Wall blocks movement (identity rule to register type)
+wall : wall, rate=0.

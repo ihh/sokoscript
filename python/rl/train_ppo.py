@@ -262,6 +262,116 @@ def make_treasure_miner_env(board_size=16, seed=None):
     )
 
 
+def make_minefield_env(board_size=16, seed=None, n_mines=20):
+    """Create a minefield environment. Mines look like ground — survey to detect."""
+    from sokoscript.env import SokoScriptEnv
+
+    grammars_dir = os.path.join(os.path.dirname(__file__), '..', '..', 'grammars')
+    with open(os.path.join(grammars_dir, 'minefield.txt')) as f:
+        grammar = f.read()
+
+    def init_fn(board):
+        import random
+        rng = random.Random(seed)
+        for y in range(board.size):
+            for x in range(board.size):
+                board.set_cell_type_by_name(x, y, 'ground')
+        # Player at bottom-left area
+        board.set_cell_type_by_name(1, board.size - 2, 'player', '', {'id': 'p1'})
+        # Exit at top-right area
+        board.set_cell_type_by_name(board.size - 2, 1, 'exit')
+        # Scatter mines (avoiding player and exit)
+        placed = 0
+        while placed < n_mines:
+            mx = rng.randint(0, board.size - 1)
+            my = rng.randint(0, board.size - 1)
+            if (mx, my) in [(1, board.size - 2), (board.size - 2, 1)]:
+                continue
+            # Don't place mines in the immediate starting area
+            if abs(mx - 1) + abs(my - (board.size - 2)) <= 2:
+                continue
+            board.set_cell_type_by_name(mx, my, 'mine')
+            placed += 1
+        # Place some safe markers near the edges of mine clusters
+        for _ in range(5):
+            sx = rng.randint(0, board.size - 1)
+            sy = rng.randint(0, board.size - 1)
+            board.set_cell_type_by_name(sx, sy, 'safe')
+
+    return SokoScriptEnv(
+        grammar=grammar,
+        board_size=board_size,
+        player_id='p1',
+        dt=0.05,
+        max_steps=200,
+        board_init_fn=init_fn,
+        score_reward_scale=1.0,
+        time_penalty=0.01,
+        seed=seed,
+    )
+
+
+def make_scout_env(board_size=16, seed=None, n_treasures=8, n_traps=5):
+    """Create a scout/fog-of-war environment."""
+    from sokoscript.env import SokoScriptEnv
+
+    grammars_dir = os.path.join(os.path.dirname(__file__), '..', '..', 'grammars')
+    with open(os.path.join(grammars_dir, 'scout.txt')) as f:
+        grammar = f.read()
+
+    def init_fn(board):
+        import random
+        rng = random.Random(seed)
+        # Fill with fog
+        for y in range(board.size):
+            for x in range(board.size):
+                board.set_cell_type_by_name(x, y, 'fog')
+        # Player in center with small cleared area
+        cx, cy = board.size // 2, board.size // 2
+        for dy in range(-1, 2):
+            for dx in range(-1, 2):
+                board.set_cell_type_by_name(
+                    (cx + dx) % board.size, (cy + dy) % board.size, 'ground')
+        board.set_cell_type_by_name(cx, cy, 'player', '', {'id': 'p1'})
+        # Hide treasures in fog
+        placed = 0
+        while placed < n_treasures:
+            tx = rng.randint(0, board.size - 1)
+            ty = rng.randint(0, board.size - 1)
+            if abs(tx - cx) + abs(ty - cy) <= 2:
+                continue
+            board.set_cell_type_by_name(tx, ty, 'treasure')
+            placed += 1
+        # Hide traps in fog
+        placed = 0
+        while placed < n_traps:
+            tx = rng.randint(0, board.size - 1)
+            ty = rng.randint(0, board.size - 1)
+            if abs(tx - cx) + abs(ty - cy) <= 3:
+                continue
+            board.set_cell_type_by_name(tx, ty, 'trap')
+            placed += 1
+        # Scatter some walls
+        for _ in range(board.size):
+            wx = rng.randint(0, board.size - 1)
+            wy = rng.randint(0, board.size - 1)
+            if abs(wx - cx) + abs(wy - cy) <= 2:
+                continue
+            board.set_cell_type_by_name(wx, wy, 'wall')
+
+    return SokoScriptEnv(
+        grammar=grammar,
+        board_size=board_size,
+        player_id='p1',
+        dt=0.1,
+        max_steps=300,
+        board_init_fn=init_fn,
+        score_reward_scale=1.0,
+        time_penalty=0.005,
+        seed=seed,
+    )
+
+
 def make_env(game, board_size=16, seed=None):
     if game == 'forest_fire':
         return make_forest_fire_env(board_size, seed)
@@ -275,6 +385,10 @@ def make_env(game, board_size=16, seed=None):
         return make_key_door_env(board_size if board_size != 16 else 8, seed)
     if game == 'treasure_miner':
         return make_treasure_miner_env(board_size, seed)
+    if game == 'minefield':
+        return make_minefield_env(board_size, seed)
+    if game == 'scout':
+        return make_scout_env(board_size, seed)
     raise ValueError(f"Unknown game: {game}")
 
 
