@@ -5,16 +5,16 @@
 ground : apple, rate=0.2.
 
 // Predators diffuse randomly
-predator >N> ground : ground predator, rate=2.
-predator >S> ground : ground predator, rate=2.
-predator >E> ground : ground predator, rate=2.
-predator >W> ground : ground predator, rate=2.
+predator >N> ground : ground predator, rate=1.
+predator >S> ground : ground predator, rate=1.
+predator >E> ground : ground predator, rate=1.
+predator >W> ground : ground predator, rate=1.
 
 // Predator kills player
-predator >N> player : predator ground, rate=999.
-predator >S> player : predator ground, rate=999.
-predator >E> player : predator ground, rate=999.
-predator >W> player : predator ground, rate=999.
+predator >N> player : predator ground, rate=50.
+predator >S> player : predator ground, rate=50.
+predator >E> player : predator ground, rate=50.
+predator >W> player : predator ground, rate=50.
 
 // Player eats apple — score
 player >N> apple : ground $1, key={w} score=1.

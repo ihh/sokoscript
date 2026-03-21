@@ -20,7 +20,7 @@ player >E> ground : ground $1, key={d}.
 player >W> ground : ground $1, key={a}.
 
 // Gravity: rocks fall into empty space below
-rock >S> ground : ground rock, rate=50.
+rock >S> ground : ground rock, rate=10.
 
 // Falling rock crushes player
-rock >S> player : ground rock, rate=50.
+rock >S> player : ground rock, rate=10.

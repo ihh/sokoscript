@@ -2,13 +2,13 @@
 // Move with WASD. Walk into sick villagers to cure them (score).
 
 // Infection spreads between adjacent villagers
-healthy >N> sick : sick sick, rate=0.3.
-healthy >S> sick : sick sick, rate=0.3.
-healthy >E> sick : sick sick, rate=0.3.
-healthy >W> sick : sick sick, rate=0.3.
+healthy >N> sick : sick sick, rate=1.5.
+healthy >S> sick : sick sick, rate=1.5.
+healthy >E> sick : sick sick, rate=1.5.
+healthy >W> sick : sick sick, rate=1.5.
 
 // Sick villagers die
-sick : corpse, rate=0.1.
+sick : corpse, rate=0.3.
 
 // Corpses become impassable graves
 corpse : grave, rate=0.2.
