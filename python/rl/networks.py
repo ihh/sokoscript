@@ -133,6 +133,9 @@ if HAS_TORCH:
             self.aux_weight = aux_weight
             self.aux_losses = []
 
+        def _on_step(self):
+            return True
+
         def _on_rollout_end(self):
             extractor = self.model.policy.features_extractor
             if not hasattr(extractor, '_transition_logits'):
