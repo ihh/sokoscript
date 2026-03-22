@@ -1,0 +1,50 @@
+// === Dominion ===
+// Plant banners to claim territory. Blight creeps. Borders burn.
+
+// Blight spreads to neutral ground
+blight >N> neutral : blight blight, rate=0.3.
+blight >S> neutral : blight blight, rate=0.3.
+blight >E> neutral : blight blight, rate=0.3.
+blight >W> neutral : blight blight, rate=0.3.
+
+// Claimed territory decays to wild (wilderness reclamation)
+claimed : wild, rate=0.02.
+
+// Wild regrows to neutral
+wild : neutral, rate=0.1.
+
+// Conflict: claimed meets blight -> both become scorched
+claimed >N> blight : scorched scorched, rate=5.
+claimed >S> blight : scorched scorched, rate=5.
+claimed >E> blight : scorched scorched, rate=5.
+claimed >W> blight : scorched scorched, rate=5.
+
+// Blight spawns at edges (rare, simulated as spontaneous conversion)
+neutral : blight, rate=0.003.
+
+// Herald plants banner — claims neutral ground, score!
+herald >N> neutral : claimed $1, key={w} score=1.
+herald >S> neutral : claimed $1, key={s} score=1.
+herald >E> neutral : claimed $1, key={d} score=1.
+herald >W> neutral : claimed $1, key={a} score=1.
+
+// Herald moves on claimed territory
+herald >N> claimed : claimed $1, key={w}.
+herald >S> claimed : claimed $1, key={s}.
+herald >E> claimed : claimed $1, key={d}.
+herald >W> claimed : claimed $1, key={a}.
+
+// Herald moves on wild ground
+herald >N> wild : neutral $1, key={w}.
+herald >S> wild : neutral $1, key={s}.
+herald >E> wild : neutral $1, key={d}.
+herald >W> wild : neutral $1, key={a}.
+
+// Herald killed by blight
+blight >N> herald : blight scorched, rate=10.
+blight >S> herald : blight scorched, rate=10.
+blight >E> herald : blight scorched, rate=10.
+blight >W> herald : blight scorched, rate=10.
+
+// Scorched is permanent (identity rule to register type)
+scorched : scorched, rate=0.

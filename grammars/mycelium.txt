@@ -1,0 +1,48 @@
+// === Mycelium ===
+// Harvest mushrooms from a living forest. Every pick reshapes the ecosystem.
+
+// Rot spawns mushrooms
+rot : mushroom, rate=0.08.
+
+// Mushrooms wilt if not picked
+mushroom : soil, rate=0.15.
+
+// Rot spreads slowly to adjacent soil
+rot >N> soil : rot soil, rate=0.05.
+rot >S> soil : rot soil, rate=0.05.
+rot >E> soil : rot soil, rate=0.05.
+rot >W> soil : rot soil, rate=0.05.
+
+// Rot decays back to soil
+rot : soil, rate=0.03.
+
+// Saplings grow from soil near trees
+tree >N> soil : tree sapling, rate=0.01.
+tree >S> soil : tree sapling, rate=0.01.
+tree >E> soil : tree sapling, rate=0.01.
+tree >W> soil : tree sapling, rate=0.01.
+
+// Saplings mature into trees
+sapling : tree, rate=0.02.
+
+// Overcrowded trees die into rot (tree next to tree triggers death)
+tree >N> tree : rot tree, rate=0.005.
+tree >E> tree : rot tree, rate=0.005.
+
+// Gardener harvests mushroom — score!
+gardener >N> mushroom : soil $1, key={w} score=1.
+gardener >S> mushroom : soil $1, key={s} score=1.
+gardener >E> mushroom : soil $1, key={d} score=1.
+gardener >W> mushroom : soil $1, key={a} score=1.
+
+// Gardener moves on soil
+gardener >N> soil : soil $1, key={w}.
+gardener >S> soil : soil $1, key={s}.
+gardener >E> soil : soil $1, key={d}.
+gardener >W> soil : soil $1, key={a}.
+
+// Gardener moves over rot
+gardener >N> rot : soil $1, key={w}.
+gardener >S> rot : soil $1, key={s}.
+gardener >E> rot : soil $1, key={d}.
+gardener >W> rot : soil $1, key={a}.

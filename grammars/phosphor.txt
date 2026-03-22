@@ -1,0 +1,43 @@
+// === Phosphor ===
+// Ignite crystals and watch light cascade across the darkness.
+
+// Bright cells excite adjacent crystals (the cascade)
+crystal >N> bright : bright bright, rate=0.8.
+crystal >S> bright : bright bright, rate=0.8.
+crystal >E> bright : bright bright, rate=0.8.
+crystal >W> bright : bright bright, rate=0.8.
+
+// Bright dims to glow
+bright : glow, rate=0.5.
+
+// Glow dims to flicker
+glow : flicker, rate=0.5.
+
+// Flicker dies to dark
+flicker : dark, rate=0.5.
+
+// Dark cells slowly regrow crystals
+dark : crystal, rate=0.02.
+
+// Spark ignites crystal — score!
+spark >N> crystal : bright $1, key={w} score=1.
+spark >S> crystal : bright $1, key={s} score=1.
+spark >E> crystal : bright $1, key={d} score=1.
+spark >W> crystal : bright $1, key={a} score=1.
+
+// Spark moves on dark
+spark >N> dark : dark $1, key={w}.
+spark >S> dark : dark $1, key={s}.
+spark >E> dark : dark $1, key={d}.
+spark >W> dark : dark $1, key={a}.
+
+// Spark moves through glow and flicker (fading light)
+spark >N> glow : dark $1, key={w}.
+spark >S> glow : dark $1, key={s}.
+spark >E> glow : dark $1, key={d}.
+spark >W> glow : dark $1, key={a}.
+
+spark >N> flicker : dark $1, key={w}.
+spark >S> flicker : dark $1, key={s}.
+spark >E> flicker : dark $1, key={d}.
+spark >W> flicker : dark $1, key={a}.
