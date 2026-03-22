@@ -389,7 +389,112 @@ def make_env(game, board_size=16, seed=None):
         return make_minefield_env(board_size, seed)
     if game == 'scout':
         return make_scout_env(board_size, seed)
+    if game == 'dominion':
+        return make_dominion_env(board_size, seed)
+    if game == 'phosphor':
+        return make_phosphor_env(board_size, seed)
+    if game == 'mycelium':
+        return make_mycelium_env(board_size, seed)
     raise ValueError(f"Unknown game: {game}")
+
+
+def make_dominion_env(board_size=16, seed=None):
+    """Create a Dominion (territory control) environment."""
+    from sokoscript.env import SokoScriptEnv
+
+    grammars_dir = os.path.join(os.path.dirname(__file__), '..', '..', 'grammars')
+    with open(os.path.join(grammars_dir, 'dominion.txt')) as f:
+        grammar = f.read()
+
+    def init_fn(board):
+        import random
+        rng = random.Random(seed)
+        # Fill with neutral
+        for y in range(board.size):
+            for x in range(board.size):
+                board.set_cell_type_by_name(x, y, 'neutral')
+        # Player in center
+        board.set_cell_type_by_name(
+            board.size // 2, board.size // 2,
+            'herald', '', {'id': 'p1'})
+        # Small claimed area around player
+        for dy in range(-1, 2):
+            for dx in range(-1, 2):
+                if dx == 0 and dy == 0:
+                    continue
+                board.set_cell_type_by_name(
+                    (board.size // 2 + dx) % board.size,
+                    (board.size // 2 + dy) % board.size, 'claimed')
+        # Blight seeds at edges
+        for pos in [(0, 0), (board.size-1, 0), (0, board.size-1), (board.size-1, board.size-1)]:
+            board.set_cell_type_by_name(pos[0], pos[1], 'blight')
+
+    return SokoScriptEnv(
+        grammar=grammar, board_size=board_size, player_id='p1',
+        dt=0.2, max_steps=500, board_init_fn=init_fn,
+        score_reward_scale=1.0, time_penalty=0.001, seed=seed,
+    )
+
+
+def make_phosphor_env(board_size=16, seed=None):
+    """Create a Phosphor (light cascade) environment."""
+    from sokoscript.env import SokoScriptEnv
+
+    grammars_dir = os.path.join(os.path.dirname(__file__), '..', '..', 'grammars')
+    with open(os.path.join(grammars_dir, 'phosphor.txt')) as f:
+        grammar = f.read()
+
+    def init_fn(board):
+        import random
+        rng = random.Random(seed)
+        # Fill with crystals
+        for y in range(board.size):
+            for x in range(board.size):
+                if rng.random() < 0.7:
+                    board.set_cell_type_by_name(x, y, 'crystal')
+                else:
+                    board.set_cell_type_by_name(x, y, 'dark')
+        # Player (spark) in center
+        board.set_cell_type_by_name(
+            board.size // 2, board.size // 2,
+            'spark', '', {'id': 'p1'})
+
+    return SokoScriptEnv(
+        grammar=grammar, board_size=board_size, player_id='p1',
+        dt=0.1, max_steps=500, board_init_fn=init_fn,
+        score_reward_scale=1.0, time_penalty=0.001, seed=seed,
+    )
+
+
+def make_mycelium_env(board_size=16, seed=None):
+    """Create a Mycelium (mushroom ecology) environment."""
+    from sokoscript.env import SokoScriptEnv
+
+    grammars_dir = os.path.join(os.path.dirname(__file__), '..', '..', 'grammars')
+    with open(os.path.join(grammars_dir, 'mycelium.txt')) as f:
+        grammar = f.read()
+
+    def init_fn(board):
+        import random
+        rng = random.Random(seed)
+        for y in range(board.size):
+            for x in range(board.size):
+                r = rng.random()
+                if r < 0.3:
+                    board.set_cell_type_by_name(x, y, 'tree')
+                elif r < 0.4:
+                    board.set_cell_type_by_name(x, y, 'rot')
+                else:
+                    board.set_cell_type_by_name(x, y, 'soil')
+        board.set_cell_type_by_name(
+            board.size // 2, board.size // 2,
+            'gardener', '', {'id': 'p1'})
+
+    return SokoScriptEnv(
+        grammar=grammar, board_size=board_size, player_id='p1',
+        dt=0.2, max_steps=500, board_init_fn=init_fn,
+        score_reward_scale=1.0, time_penalty=0.001, seed=seed,
+    )
 
 
 def train(game='forest_fire', timesteps=1_000_000, board_size=16,

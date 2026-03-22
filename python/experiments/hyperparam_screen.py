@@ -28,6 +28,9 @@ PLAYER_TYPES = {
     'plague_doctor': 'player',
     'minefield': 'player',
     'scout': 'player',
+    'dominion': 'herald',
+    'phosphor': 'spark',
+    'mycelium': 'gardener',
 }
 
 
