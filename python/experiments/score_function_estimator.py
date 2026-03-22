@@ -43,13 +43,17 @@ class RuleFireLogger:
                 rate_hz = rule.get('rate_Hz', 0)
                 if rate_hz > 0:
                     name = grammar['types'][cell_type]
+                    # rate_hz is approximately events/second (the human-readable rate)
+                    # The actual per-second rate needs the acceptProb correction
+                    accept_prob = rule.get('acceptProb_leftShift30', 0x3FFFFFFF) / 0x3FFFFFFF
+                    effective_rate = rate_hz * accept_prob  # true events/sec/cell
                     index[(cell_type, ri)] = {
                         'id': rule_id,
                         'type': cell_type,
                         'type_name': name,
                         'rule_index': ri,
                         'rate_hz': rate_hz,
-                        'rate_seconds': rate_hz / (1 << 32),
+                        'effective_rate': effective_rate,
                     }
                     self.fire_counts[rule_id] = 0
                     self.exposure[rule_id] = 0.0
@@ -92,12 +96,13 @@ class RuleFireLogger:
     def score_function_gradient(self, outcome):
         """Compute ∂/∂θ_k log p * outcome for each rule k.
 
+        The gradient is with respect to the effective rate (events/sec/cell).
         Returns dict: rule_id -> gradient component.
         """
         grads = {}
         for meta in self.rules:
             rid = meta['id']
-            theta_k = meta['rate_seconds']
+            theta_k = meta['effective_rate']
             n_k = self.fire_counts[rid]
             t_k = self.exposure[rid]
 
@@ -189,16 +194,20 @@ def estimate_gradients(game, board_size=16, n_episodes=200, seed=42, metric='sco
 
     elapsed = time.time() - t0
 
-    # Average gradients and compute statistics
     n_rules = len(rule_meta)
+    mean_outcome = np.mean(all_outcomes)
+
     grad_matrix = np.zeros((n_episodes, n_rules))
     for ep, grads in enumerate(all_grads):
         for rid, g in grads.items():
             grad_matrix[ep, rid] = g
 
+    # Baseline subtraction: E[(f-b) * ∇log p] = E[f * ∇log p] since E[∇log p] = 0
+    # So the mean is unchanged, but subtracting per-episode improves variance.
+    # We recompute: store grad_log_p separately, multiply by (outcome - baseline).
+    # For now, the raw estimator is correct; variance reduction is a refinement.
     mean_grads = grad_matrix.mean(axis=0)
-    std_grads = grad_matrix.std(axis=0) / np.sqrt(n_episodes)  # standard error
-    mean_outcome = np.mean(all_outcomes)
+    std_grads = grad_matrix.std(axis=0) / np.sqrt(n_episodes)
 
     return {
         'rules': rule_meta,
@@ -231,9 +240,9 @@ def print_results(results):
         g = grads[idx]
         se = stds[idx]
         sig = '***' if abs(g) > 2 * se and se > 0 else ''
-        rate = meta['rate_hz'] / (1 << 32)
-        label = f"{meta['type_name']} rule#{meta['rule_index']} (rate={rate:.4f})"
-        print(f"  {label:<40} {rate:>8.4f} {g:>+10.3f} {se:>8.3f} {sig:>5}")
+        rate = meta['effective_rate']
+        label = f"{meta['type_name']} rule#{meta['rule_index']}"
+        print(f"  {label:<30} {rate:>8.2f}/s {g:>+12.2f} {se:>10.2f} {sig:>5}")
 
 
 def main():
@@ -271,9 +280,9 @@ def main():
         se = stds[idx]
         if abs(g) > 2 * se and se > 0:
             direction = "INCREASE" if g > 0 else "DECREASE"
-            rate = meta['rate_hz'] / (1 << 32)
+            rate = meta['effective_rate']
             print(f"    {direction} {meta['type_name']} rule#{meta['rule_index']} "
-                  f"(rate={rate:.4f}, ∂={g:+.3f})")
+                  f"(rate={rate:.2f}/s, ∂={g:+.2f})")
 
 
 if __name__ == '__main__':
