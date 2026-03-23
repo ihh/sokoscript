@@ -124,64 +124,65 @@ class DifferentiableSimulator(nn.Module):
         # Learnable rate multipliers (one per type)
         self.log_rates = nn.Parameter(torch.zeros(num_types))
 
-    def simulate_step(self, board_probs, dt=0.1):
+    def _precompute_transition_table(self):
+        """Precompute T[x, n, y] from world model (frozen, no grad needed)."""
+        K = self.num_types
+        T = torch.zeros(K, K, K)
+        with torch.no_grad():
+            for x in range(K):
+                for n in range(K):
+                    c_t = torch.tensor([x], dtype=torch.long)
+                    n_t = torch.tensor([n], dtype=torch.long)
+                    if hasattr(self.world_model, 'forward'):
+                        log_p = self.world_model(c_t, n_t)
+                        T[x, n] = torch.exp(log_p[0])
+                    else:
+                        T[x, n] = torch.tensor(
+                            self.world_model.predict(x, (n, n, n, n)),
+                            dtype=torch.float32)
+        return T
+
+    def simulate_step(self, board_probs, T, dt=0.1):
         """One step of soft evolution.
 
         board_probs: (H, W, K) probability tensor
+        T: (K, K, K) frozen transition table from world model
         Returns: (H, W, K) next-step probabilities
+
+        Gradients flow through board_probs and self.log_rates only.
         """
         H, W, K = board_probs.shape
         rates = F.softplus(self.log_rates)  # positive rates per type
 
-        # Compute transition probabilities for each cell
-        # For each direction, shift the board and use the model
         next_probs = torch.zeros_like(board_probs)
 
         shifts = [
-            torch.roll(board_probs, 1, dims=0),   # N
-            torch.roll(board_probs, -1, dims=1),   # E
-            torch.roll(board_probs, -1, dims=0),   # S
-            torch.roll(board_probs, 1, dims=1),    # W
+            torch.roll(board_probs, 1, dims=0),
+            torch.roll(board_probs, -1, dims=1),
+            torch.roll(board_probs, -1, dims=0),
+            torch.roll(board_probs, 1, dims=1),
         ]
 
         for d, neighbor_probs in enumerate(shifts):
-            # For each (cell_type, neighbor_type) pair, weight by
-            # P(cell=x) * P(neighbor=n) * model(x,n->y)
             for x in range(K):
                 for n in range(K):
-                    # P(cell=x) * P(neighbor=n)
-                    joint = board_probs[:, :, x] * neighbor_probs[:, :, n]  # (H, W)
+                    joint = board_probs[:, :, x] * neighbor_probs[:, :, n]
+                    trans = T[x, n]  # (K,) — frozen, no grad
+                    # Gradients flow through: joint (from board_probs) and rates[x]
+                    contribution = joint.unsqueeze(-1) * rates[x] * trans.unsqueeze(0).unsqueeze(0) * dt
+                    next_probs = next_probs + contribution
 
-                    # Transition distribution from model
-                    c_t = torch.tensor([x], dtype=torch.long)
-                    n_t = torch.tensor([n], dtype=torch.long)
-                    if hasattr(self.world_model, 'forward'):
-                        with torch.no_grad():
-                            log_p = self.world_model(c_t, n_t)
-                        trans = torch.exp(log_p[0])  # (K,)
-                    else:
-                        # Numpy model
-                        trans = torch.tensor(
-                            self.world_model.predict(x, (n, n, n, n)),
-                            dtype=torch.float32)
-
-                    # Accumulate: P(next=y) += joint * rate_x * P(x->y|n)
-                    for y in range(K):
-                        next_probs[:, :, y] += joint * rates[x] * trans[y] * dt
-
-        # Mix: (1 - total_change_rate) * current + change
         total_change = next_probs.sum(dim=-1, keepdim=True).clamp(max=1.0)
         result = (1 - total_change) * board_probs + next_probs
-
-        # Renormalize
         return result / result.sum(dim=-1, keepdim=True).clamp(min=1e-8)
 
     def simulate_trajectory(self, initial_board, n_steps=50, dt=0.1):
         """Roll out n_steps of soft evolution."""
+        T = self._precompute_transition_table()
         trajectory = [initial_board]
         state = initial_board
         for _ in range(n_steps):
-            state = self.simulate_step(state, dt)
+            state = self.simulate_step(state, T, dt)
             trajectory.append(state)
         return trajectory
 
@@ -236,12 +237,15 @@ def optimize_rates(world_model, num_types, type_names, board_size=16,
         trajectory = sim.simulate_trajectory(board, n_steps=n_sim_steps)
         outcome = outcome_fn(trajectory)
 
-        loss = -outcome  # maximize outcome
+        if not isinstance(outcome, torch.Tensor):
+            outcome = torch.tensor(outcome, dtype=torch.float32, requires_grad=True)
+
+        loss = -outcome
         optimizer.zero_grad()
         loss.backward()
         optimizer.step()
 
-        history.append(outcome.item())
+        history.append(float(outcome.item() if hasattr(outcome, 'item') else outcome))
         if (i + 1) % 20 == 0:
             print(f"    iter {i+1}: outcome={outcome.item():.4f}")
 
