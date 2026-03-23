@@ -309,6 +309,86 @@ def make_two_player_dominion(board_size=16, seed=None, dt=1.0,
     return env1, env2, shared
 
 
+def make_two_player_minefield_race(board_size=16, seed=None, dt=0.5,
+                                    n_mines=30, window_size=11,
+                                    divine_penalty_dt=0.15):
+    """Two players race through a shared minefield to the exit.
+
+    Mines are invisible (same obs as ground to the CNN — the agent can't
+    distinguish mine from ground without divine). Divine reveals the next
+    mine that would detonate, saving your life at the cost of time.
+
+    The racing pressure (opponent might reach exit first) competes with
+    the survival pressure (stepping on a mine kills you). This tension
+    should make divine valuable even under competition.
+    """
+    import os
+    grammars_dir = os.path.join(os.path.dirname(__file__), '..', '..', 'grammars')
+    with open(os.path.join(grammars_dir, 'minefield_race.txt')) as f:
+        grammar = f.read()
+
+    def init_fn(board):
+        import random
+        rng = random.Random(seed)
+        # Fill with ground
+        for y in range(board.size):
+            for x in range(board.size):
+                board.set_cell_type_by_name(x, y, 'ground')
+
+        # Exit in center
+        board.set_cell_type_by_name(board.size // 2, board.size // 2, 'exit')
+
+        # Player 1: bottom-left
+        p1x, p1y = 1, board.size - 2
+        board.set_cell_type_by_name(p1x, p1y, 'herald', '', {'id': 'p1'})
+
+        # Player 2: top-right
+        p2x, p2y = board.size - 2, 1
+        board.set_cell_type_by_name(p2x, p2y, 'herald', '', {'id': 'p2'})
+
+        # Clear safe zones around players (3x3)
+        safe_cells = set()
+        for pid, (px, py) in [('p1', (p1x, p1y)), ('p2', (p2x, p2y))]:
+            for dy in range(-1, 2):
+                for dx in range(-1, 2):
+                    safe_cells.add(((px + dx) % board.size, (py + dy) % board.size))
+
+        # Scatter mines (avoiding players, exit, and safe zones)
+        placed = 0
+        while placed < n_mines:
+            mx = rng.randint(0, board.size - 1)
+            my = rng.randint(0, board.size - 1)
+            if (mx, my) in safe_cells:
+                continue
+            if mx == board.size // 2 and my == board.size // 2:
+                continue  # don't mine the exit
+            board.set_cell_type_by_name(mx, my, 'mine')
+            placed += 1
+
+        # Scatter a few safe markers as hints
+        for _ in range(board.size // 2):
+            sx = rng.randint(0, board.size - 1)
+            sy = rng.randint(0, board.size - 1)
+            if (sx, sy) not in safe_cells and not (sx == board.size // 2 and sy == board.size // 2):
+                board.set_cell_type_by_name(sx, sy, 'safe')
+
+    shared = TwoPlayerBoard(
+        grammar=grammar, board_size=board_size,
+        player1_id='p1', player2_id='p2',
+        dt=dt, max_steps=300, board_init_fn=init_fn,
+        score_reward_scale=1.0, time_penalty=0.002, seed=seed,
+    )
+
+    env1 = TwoPlayerEnv(shared, 'p1', 'p2', opponent_policy=None,
+                         window_size=window_size, player_type='herald',
+                         divine_penalty_dt=divine_penalty_dt)
+    env2 = TwoPlayerEnv(shared, 'p2', 'p1', opponent_policy=None,
+                         window_size=window_size, player_type='herald',
+                         divine_penalty_dt=divine_penalty_dt)
+
+    return env1, env2, shared
+
+
 class SelfPlayCallback:
     """Updates opponent policy periodically during training.
 

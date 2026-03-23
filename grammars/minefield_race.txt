@@ -1,0 +1,33 @@
+// Minefield Race — two players race to the exit through a shared minefield!
+// Move with WASD. Mines kill on contact. Divine reveals the next mine.
+// First to the exit scores big. Stepping on a mine = death.
+
+// Mine detonates when any herald steps on it
+herald >N> mine : ground explosion, key={w}.
+herald >S> mine : ground explosion, key={s}.
+herald >E> mine : ground explosion, key={d}.
+herald >W> mine : ground explosion, key={a}.
+
+// Explosion fades
+explosion : ground, rate=5.
+
+// Herald reaches exit — big score!
+herald >N> exit : ground $1, key={w} score=50.
+herald >S> exit : ground $1, key={s} score=50.
+herald >E> exit : ground $1, key={d} score=50.
+herald >W> exit : ground $1, key={a} score=50.
+
+// Herald movement on ground
+herald >N> ground : ground $1, key={w}.
+herald >S> ground : ground $1, key={s}.
+herald >E> ground : ground $1, key={d}.
+herald >W> ground : ground $1, key={a}.
+
+// Herald can walk over safe cells
+herald >N> safe : ground $1, key={w}.
+herald >S> safe : ground $1, key={s}.
+herald >E> safe : ground $1, key={d}.
+herald >W> safe : ground $1, key={a}.
+
+// Safe is decorative (register type)
+safe : safe, rate=0.
